@@ -628,23 +628,31 @@ METHOD_FN(process_event_list, int lush_metrics)
 
     // Register redshow analysis
     if (hpcrun_ev_is(nvidia_name, NVIDIA_CUDA_REDUNDANCY)) {
-      sanitizer_redundancy_analysis_enable();
+      set_init_analysis(REDSHOW_REDUNDANCY_ANALYSIS);
+      // sanitizer_redundancy_analysis_enable();
       // Enable metrics
       gpu_metrics_GPU_REDUNDANCY_enable();
     } else if (hpcrun_ev_is(nvidia_name, NVIDIA_CUDA_DATA_FLOW)) {
-      sanitizer_data_flow_analysis_enable();
+      set_init_analysis(REDSHOW_DATA_FLOW_ANALYSIS);
+      //sanitizer_data_flow_analysis_enable();
     } else if (hpcrun_ev_is(nvidia_name, NVIDIA_CUDA_VALUE_PATTERN)) {
-      sanitizer_value_pattern_analysis_enable();
+      set_init_analysis(REDSHOW_VALUE_PATTERN_ANALYSIS);
+      //sanitizer_value_pattern_analysis_enable();
     } else if (hpcrun_ev_is(nvidia_name, NVIDIA_CUDA_MEMORY_PROFILE)) {
-      sanitizer_memory_profile_analysis_enable();
+      set_init_analysis(REDSHOW_MEMORY_PROFILE_ANALYSIS);
+      //sanitizer_memory_profile_analysis_enable();
     } else if (hpcrun_ev_is(nvidia_name, NVIDIA_CUDA_MEMORY_HEATMAP)) {
-      sanitizer_memory_heatmap_analysis_enable();
+      set_init_analysis(REDSHOW_MEMORY_HEATMAP_ANALYSIS);
+      //sanitizer_memory_heatmap_analysis_enable();
     } else if (hpcrun_ev_is(nvidia_name, NVIDIA_CUDA_MEMORY_LIVENESS)) {
-      sanitizer_memory_liveness_analysis_enable();
+      set_init_analysis(REDSHOW_MEMORY_LIVENESS_ANALYSIS);
+      //sanitizer_memory_liveness_analysis_enable();
     } else if (hpcrun_ev_is(nvidia_name, NVIDIA_CUDA_DATA_DEPENDENCY)) {
-      sanitizer_data_dependency_analysis_enable();
+      set_init_analysis(REDSHOW_DATA_DEPENDENCY_ANALYSIS);
+      //sanitizer_data_dependency_analysis_enable();
     } else if (hpcrun_ev_is(nvidia_name, NVIDIA_CUDA_TORCH_MONITOR)) {
-      sanitizer_torch_monitor_analysis_enable();
+      set_init_analysis(REDSHOW_TORCH_MONITOR_ANALYSIS);
+      //sanitizer_torch_monitor_analysis_enable();
     }
 
     // Register sanitizer callbacks

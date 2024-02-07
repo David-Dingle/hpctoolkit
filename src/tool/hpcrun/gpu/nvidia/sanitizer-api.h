@@ -1,5 +1,38 @@
 #ifndef _HPCTOOLKIT_GPU_NVIDIA_SANITIZER_API_H_
 #define _HPCTOOLKIT_GPU_NVIDIA_SANITIZER_API_H_
+#include <cuda_runtime_api.h>
+#include <cuda.h>
+
+typedef enum redshow_init_analysis{
+  REDSHOW_UNDEFINED_ANALYSIS,
+  REDSHOW_REDUNDANCY_ANALYSIS,
+  REDSHOW_DATA_FLOW_ANALYSIS,
+  REDSHOW_VALUE_PATTERN_ANALYSIS,
+  REDSHOW_MEMORY_PROFILE_ANALYSIS,
+  REDSHOW_MEMORY_HEATMAP_ANALYSIS,
+  REDSHOW_MEMORY_LIVENESS_ANALYSIS,
+  REDSHOW_DATA_DEPENDENCY_ANALYSIS,
+  REDSHOW_TORCH_MONITOR_ANALYSIS,
+} redshow_init_analysis_t;
+
+static redshow_init_analysis_t init_analysis = REDSHOW_UNDEFINED_ANALYSIS;
+
+static redshow_init_analysis_t get_init_analysis(){
+  return init_analysis;
+}
+
+static set_init_analysis(redshow_init_analysis_t val){
+  init_analysis = val;
+}
+
+/**
+ * --------------------------------------------
+ * */
+CUcontext
+My_Get_Context();
+
+void
+My_Set_Context(CUcontext context);
 
 int
 sanitizer_bind();

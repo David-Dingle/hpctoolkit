@@ -254,6 +254,7 @@ static __thread bool sanitizer_context_creation_flag = false;
 static __thread uint32_t sanitizer_thread_id_self = (1 << 30);
 static __thread uint32_t sanitizer_thread_id_local = 0;
 static __thread CUcontext sanitizer_thread_context = NULL;
+static __thread CUcontext sanitizer_thread_buffer_context = NULL;
 
 static __thread sanitizer_memory_register_delegate_t sanitizer_memory_register_delegate = {
   .flag = false
@@ -292,6 +293,17 @@ static atomic_bool sanitizer_process_stop_flag = ATOMIC_VAR_INIT(0);
 
 static sanitizer_function_list_entry_t *sanitizer_whitelist = NULL;
 static sanitizer_function_list_entry_t *sanitizer_blacklist = NULL;
+
+/**
+ * Fixed Code
+ * */
+CUcontext My_Get_Context(){
+  return sanitizer_thread_buffer_context;
+}
+
+void My_Set_Context(CUcontext context){
+  sanitizer_thread_buffer_context = context;
+}
 
 //----------------------------------------------------------
 // sanitizer function pointers for late binding
@@ -1428,7 +1440,8 @@ sanitizer_kernel_launch_sync
 
   // Init a buffer on host
   if (sanitizer_gpu_patch_buffer_host == NULL) {
-    sanitizer_gpu_patch_buffer_host = (gpu_patch_buffer_t *)hpcrun_malloc_safe(sizeof(gpu_patch_buffer_t));
+    //sanitizer_gpu_patch_buffer_host = (gpu_patch_buffer_t *)hpcrun_malloc_safe(sizeof(gpu_patch_buffer_t));
+    sanitizerAllocHost(context, (void **)(&(sanitizer_gpu_patch_buffer_host)), sizeof(gpu_patch_buffer_t));
 
     if (sanitizer_gpu_analysis_blocks != 0) {
       sanitizer_gpu_patch_buffer_addr_read_host = (gpu_patch_buffer_t *)hpcrun_malloc_safe(sizeof(gpu_patch_buffer_t));
@@ -1464,7 +1477,7 @@ sanitizer_kernel_launch_sync
 
     // Reserve for debugging correctness
     // PRINT("num_records %zu\n", num_records);
-
+    My_Set_Context(context);
     if (sanitizer_gpu_analysis_blocks == 0 && !(sanitizer_liveness_ongpu || sanitizer_torch_analysis_ongpu)) {
       buffer_analyze(persistent_id, correlation_id, stream_id, cubin_id, mod_id, sanitizer_gpu_patch_type,
         sanitizer_gpu_patch_record_size, sanitizer_gpu_patch_buffer_host,
@@ -1654,6 +1667,14 @@ sanitizer_kernel_launch_callback
 //-------------------------------------------------------------
 // callback controls
 //-------------------------------------------------------------
+static void
+output_dir_config(char *dir_name, char *suffix) {
+    size_t used = 0;
+    used += sprintf(&dir_name[used], "%s", hpcrun_files_output_directory());
+    used += sprintf(&dir_name[used], "%s", suffix);
+    mkdir(dir_name, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+}
+
 
 static void
 sanitizer_subscribe_callback
@@ -1723,10 +1744,36 @@ sanitizer_subscribe_callback
           PRINT("Sanitizer-> Stream destroy starting\n");
           break;
         }
-      case SANITIZER_CBID_RESOURCE_CONTEXT_CREATION_STARTING:
-        {
+      case SANITIZER_CBID_RESOURCE_CONTEXT_CREATION_STARTING: {
           PRINT("Sanitizer-> Context creation starting\n");
-	  
+          /** -------- */
+          switch (get_init_analysis()) {
+              case REDSHOW_REDUNDANCY_ANALYSIS:
+                  sanitizer_redundancy_analysis_enable();
+                  break;
+              case REDSHOW_DATA_FLOW_ANALYSIS:
+                  sanitizer_data_flow_analysis_enable();
+                  break;
+              case REDSHOW_VALUE_PATTERN_ANALYSIS:
+                  sanitizer_value_pattern_analysis_enable();
+                  break;
+              case REDSHOW_MEMORY_PROFILE_ANALYSIS:
+                  sanitizer_memory_profile_analysis_enable();
+                  break;
+              case REDSHOW_MEMORY_HEATMAP_ANALYSIS:
+                  sanitizer_memory_heatmap_analysis_enable();
+                  break;
+              case REDSHOW_MEMORY_LIVENESS_ANALYSIS:
+                  sanitizer_memory_liveness_analysis_enable();
+                  break;
+              case REDSHOW_DATA_DEPENDENCY_ANALYSIS:
+                  sanitizer_data_dependency_analysis_enable();
+                  break;
+              case REDSHOW_TORCH_MONITOR_ANALYSIS:
+                  sanitizer_torch_monitor_analysis_enable();
+                  break;
+          }
+          /** -------- */
 	  sanitizer_context_creation_flag = true;
           break;
         }
@@ -2101,16 +2148,6 @@ sanitizer_bind()
 #endif // ! HPCRUN_STATIC_LINK
 }
 
-
-static void
-output_dir_config(char *dir_name, char *suffix) {
-  size_t used = 0;
-  used += sprintf(&dir_name[used], "%s", hpcrun_files_output_directory());
-  used += sprintf(&dir_name[used], "%s", suffix);
-  mkdir(dir_name, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
-}
-
-
 void
 sanitizer_redundancy_analysis_enable()
 {
@@ -2263,7 +2300,7 @@ sanitizer_callbacks_subscribe()
     redshow_get_op_id_register(gpu_correlation_id);
   }
 
-  redshow_tool_dtoh_register(sanitizer_dtoh);
+//  redshow_tool_dtoh_register(sanitizer_dtoh);
 
   HPCRUN_SANITIZER_CALL(sanitizerSubscribe,
     (&sanitizer_subscriber_handle, sanitizer_subscribe_callback, NULL));
