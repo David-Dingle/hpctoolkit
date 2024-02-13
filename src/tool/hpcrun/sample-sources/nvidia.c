@@ -656,7 +656,7 @@ METHOD_FN(process_event_list, int lush_metrics)
     }
 
     // Register sanitizer callbacks
-    sanitizer_callbacks_subscribe();
+    // sanitizer_callbacks_subscribe();
 
     // Init background process thread
     sanitizer_process_init();

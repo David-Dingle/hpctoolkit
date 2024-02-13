@@ -1773,6 +1773,7 @@ sanitizer_subscribe_callback
                   sanitizer_torch_monitor_analysis_enable();
                   break;
           }
+      sanitizer_callbacks_subscribe();
           /** -------- */
 	  sanitizer_context_creation_flag = true;
           break;
@@ -2300,7 +2301,7 @@ sanitizer_callbacks_subscribe()
     redshow_get_op_id_register(gpu_correlation_id);
   }
 
-//  redshow_tool_dtoh_register(sanitizer_dtoh);
+  redshow_tool_dtoh_register(sanitizer_dtoh);
 
   HPCRUN_SANITIZER_CALL(sanitizerSubscribe,
     (&sanitizer_subscriber_handle, sanitizer_subscribe_callback, NULL));
