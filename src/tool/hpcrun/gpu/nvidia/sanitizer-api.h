@@ -2,7 +2,6 @@
 #define _HPCTOOLKIT_GPU_NVIDIA_SANITIZER_API_H_
 #include <cuda_runtime_api.h>
 #include <cuda.h>
-#include <stdio.h>
 
 typedef enum redshow_init_analysis{
   REDSHOW_UNDEFINED_ANALYSIS = 1,
