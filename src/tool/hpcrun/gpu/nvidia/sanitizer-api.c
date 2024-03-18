@@ -180,6 +180,14 @@ typedef cct_node_t *(*sanitizer_correlation_callback_t)
  uint32_t skip_frames
 );
 
+/**
+ * getter / setter of analysis modules
+ * */
+
+/**
+ * ends here
+ * */
+
 static cct_node_t *
 sanitizer_correlation_callback_dummy // __attribute__((unused))
 (
@@ -293,6 +301,18 @@ static atomic_bool sanitizer_process_stop_flag = ATOMIC_VAR_INIT(0);
 
 static sanitizer_function_list_entry_t *sanitizer_whitelist = NULL;
 static sanitizer_function_list_entry_t *sanitizer_blacklist = NULL;
+
+static volatile redshow_init_analysis_t init_analysis = REDSHOW_UNDEFINED_ANALYSIS;
+
+redshow_init_analysis_t get_init_analysis(){
+  printf("GETTER Function called here %d\n", (int)init_analysis);
+  return init_analysis;
+}
+
+void set_init_analysis(redshow_init_analysis_t val){
+  printf("SETTER Function called here %d\n", (int)val);
+  init_analysis = val;
+}
 
 /**
  * Fixed Code
@@ -1747,6 +1767,7 @@ sanitizer_subscribe_callback
       case SANITIZER_CBID_RESOURCE_CONTEXT_CREATION_STARTING: {
           PRINT("Sanitizer-> Context creation starting\n");
           /** -------- */
+          printf("GETTER %d \n", init_analysis);
           switch (get_init_analysis()) {
               case REDSHOW_REDUNDANCY_ANALYSIS:
                   sanitizer_redundancy_analysis_enable();
@@ -1772,9 +1793,13 @@ sanitizer_subscribe_callback
               case REDSHOW_TORCH_MONITOR_ANALYSIS:
                   sanitizer_torch_monitor_analysis_enable();
                   break;
+              case REDSHOW_UNDEFINED_ANALYSIS:
+                  PRINT("--REDSHOW_UNDEFINED_ANALYSIS--\n");
+                  break;
           }
+          redshow_tool_dtoh_register(sanitizer_dtoh);
           /** -------- */
-	  sanitizer_context_creation_flag = true;
+	      sanitizer_context_creation_flag = true;
           break;
         }
       case SANITIZER_CBID_RESOURCE_CONTEXT_CREATION_FINISHED:

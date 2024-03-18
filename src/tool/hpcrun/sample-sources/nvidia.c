@@ -92,8 +92,6 @@
 #include <hpcrun/utilities/tokenize.h>
 #include <hpcrun/thread_data.h>
 
-
-
 /******************************************************************************
  * macros
  *****************************************************************************/
@@ -646,6 +644,7 @@ METHOD_FN(process_event_list, int lush_metrics)
       //sanitizer_memory_heatmap_analysis_enable();
     } else if (hpcrun_ev_is(nvidia_name, NVIDIA_CUDA_MEMORY_LIVENESS)) {
       set_init_analysis(REDSHOW_MEMORY_LIVENESS_ANALYSIS);
+      // printf("%d \n",(int)get_init_analysis());
       //sanitizer_memory_liveness_analysis_enable();
     } else if (hpcrun_ev_is(nvidia_name, NVIDIA_CUDA_DATA_DEPENDENCY)) {
       set_init_analysis(REDSHOW_DATA_DEPENDENCY_ANALYSIS);
@@ -654,7 +653,6 @@ METHOD_FN(process_event_list, int lush_metrics)
       set_init_analysis(REDSHOW_TORCH_MONITOR_ANALYSIS);
       //sanitizer_torch_monitor_analysis_enable();
     }
-
     // Register sanitizer callbacks
     sanitizer_callbacks_subscribe();
 
