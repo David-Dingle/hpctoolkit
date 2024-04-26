@@ -116,6 +116,7 @@
 #define NVIDIA_CUDA_MEMORY_LIVENESS "gpu=nvidia,memory_liveness"
 #define NVIDIA_CUDA_DATA_DEPENDENCY "gpu=nvidia,data_dependency"
 #define NVIDIA_CUDA_TORCH_MONITOR "gpu=nvidia,torch_monitor"
+#define NVIDIA_CUDA_TORCH_VIEW "gpu=nvidia,torch_view"
 
 /******************************************************************************
  * local variables
@@ -172,6 +173,9 @@ static const int DEFAULT_LIVENESS_ONGPU = 0;
 static const int DEFAULT_TORCH_ANALYSIS = 0;
 
 static const int DEFAULT_TORCH_ANALYSIS_ONGPU = 0;
+// 0: disable torch view analysis
+static const int DEFAULT_TORCH_VIEW = 0;
+static const int DEFAULT_TORCH_VIEW_ONGPU = 0;
 
 //******************************************************************************
 // constants
@@ -380,7 +384,9 @@ METHOD_FN(supports_event, const char *ev_str)
     hpcrun_ev_is(ev_str, NVIDIA_CUDA_VALUE_PATTERN) || hpcrun_ev_is(ev_str, NVIDIA_CUDA_DATA_FLOW) ||
     hpcrun_ev_is(ev_str, NVIDIA_CUDA_REDUNDANCY) || hpcrun_ev_is(ev_str, NVIDIA_CUDA_MEMORY_PROFILE) ||
     hpcrun_ev_is(ev_str, NVIDIA_CUDA_MEMORY_HEATMAP) || hpcrun_ev_is(ev_str, NVIDIA_CUDA_MEMORY_LIVENESS) ||
-    hpcrun_ev_is(ev_str, NVIDIA_CUDA_DATA_DEPENDENCY) || hpcrun_ev_is(ev_str, NVIDIA_CUDA_TORCH_MONITOR);
+    hpcrun_ev_is(ev_str, NVIDIA_CUDA_DATA_DEPENDENCY) || hpcrun_ev_is(ev_str, NVIDIA_CUDA_TORCH_MONITOR) ||
+    hpcrun_ev_is(ev_str, NVIDIA_CUDA_TORCH_VIEW);
+
 #else
   return false;
 #endif
@@ -491,7 +497,8 @@ METHOD_FN(process_event_list, int lush_metrics)
   } else if (hpcrun_ev_is(nvidia_name, NVIDIA_CUDA_REDUNDANCY) || hpcrun_ev_is(nvidia_name, NVIDIA_CUDA_DATA_FLOW) ||
     hpcrun_ev_is(nvidia_name, NVIDIA_CUDA_VALUE_PATTERN) || hpcrun_ev_is(nvidia_name, NVIDIA_CUDA_MEMORY_PROFILE) ||
     hpcrun_ev_is(nvidia_name, NVIDIA_CUDA_MEMORY_HEATMAP) || hpcrun_ev_is(nvidia_name, NVIDIA_CUDA_MEMORY_LIVENESS) ||
-    hpcrun_ev_is(nvidia_name, NVIDIA_CUDA_DATA_DEPENDENCY) || hpcrun_ev_is(nvidia_name, NVIDIA_CUDA_TORCH_MONITOR)) {
+    hpcrun_ev_is(nvidia_name, NVIDIA_CUDA_DATA_DEPENDENCY) || hpcrun_ev_is(nvidia_name, NVIDIA_CUDA_TORCH_MONITOR) ||
+    hpcrun_ev_is(nvidia_name, NVIDIA_CUDA_TORCH_VIEW)) {
 #ifndef HPCRUN_STATIC_LINK
     if (sanitizer_bind()) {
       EEMSG("hpcrun: unable to bind to NVIDIA SANITIZER library %s\n", dlerror());
@@ -528,6 +535,10 @@ METHOD_FN(process_event_list, int lush_metrics)
     int torch_analysis = control_knob_value_get_int(HPCRUN_SANITIZER_TORCH_ANALYSIS);
 
     int torch_ongpu = control_knob_value_get_int(HPCRUN_SANITIZER_TORCH_ANALYSIS_ONGPU);
+
+    int torch_view = control_knob_value_get_int(HPCRUN_SANITIZER_TORCH_VIEW);
+
+    int torch_view_ongpu = control_knob_value_get_int(HPCRUN_SANITIZER_TORCH_VIEW_ONGPU);
 
     kernel_sampling_frequency = control_knob_value_get_int(HPCRUN_SANITIZER_KERNEL_SAMPLING_FREQUENCY);
 
@@ -585,6 +596,14 @@ METHOD_FN(process_event_list, int lush_metrics)
       torch_ongpu = DEFAULT_TORCH_ANALYSIS_ONGPU;
     }
 
+    if (torch_view == 0) {
+      torch_view = DEFAULT_TORCH_VIEW;
+    }
+
+    if (torch_view_ongpu == 0) {
+      torch_view_ongpu = DEFAULT_TORCH_VIEW_ONGPU;
+    }
+
     PRINT("gpu_patch_record_num %d\n", gpu_patch_record_num);
     PRINT("buffer_pool_size %d\n", buffer_pool_size);
     PRINT("approx_level %d\n", approx_level);
@@ -613,6 +632,10 @@ METHOD_FN(process_event_list, int lush_metrics)
     sanitizer_torch_analysis_config(torch_analysis);
 
     sanitizer_torch_analysis_ongpu_config(torch_ongpu);
+
+    sanitizer_torch_view_config(torch_view);
+
+    sanitizer_torch_view_ongpu_config(torch_view_ongpu);
 
     // Init random number generator
     srand(time(0));
@@ -653,6 +676,9 @@ METHOD_FN(process_event_list, int lush_metrics)
     } else if (hpcrun_ev_is(nvidia_name, NVIDIA_CUDA_TORCH_MONITOR)) {
       set_init_analysis(REDSHOW_TORCH_MONITOR_ANALYSIS);
       //sanitizer_torch_monitor_analysis_enable();
+    } else if (hpcrun_ev_is(nvidia_name, NVIDIA_CUDA_TORCH_VIEW)) {
+      //sanitizer_torch_view_analysis_enable();
+      set_init_analysis(REDSHOW_TORCH_VIEW_ANALYSIS);
     }
 
     // Register sanitizer callbacks

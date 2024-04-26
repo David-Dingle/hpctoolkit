@@ -248,6 +248,8 @@ static bool sanitizer_data_flow_hash = false;
 static bool sanitizer_liveness_ongpu = false;
 static bool sanitizer_torch_analysis = false;
 static bool sanitizer_torch_analysis_ongpu = false;
+static bool sanitizer_torch_view = false;
+static bool sanitizer_torch_view_ongpu = false;  // added by xjding
 
 static __thread bool sanitizer_stop_flag = false;
 static __thread bool sanitizer_context_creation_flag = false;
@@ -294,6 +296,15 @@ static atomic_bool sanitizer_process_stop_flag = ATOMIC_VAR_INIT(0);
 static sanitizer_function_list_entry_t *sanitizer_whitelist = NULL;
 static sanitizer_function_list_entry_t *sanitizer_blacklist = NULL;
 
+static volatile redshow_init_analysis_t init_analysis = REDSHOW_UNDEFINED_ANALYSIS;
+
+redshow_init_analysis_t get_init_analysis(){
+    return init_analysis;
+}
+
+void set_init_analysis(redshow_init_analysis_t val){
+    init_analysis = val;
+}
 /**
  * Fixed Code
  * */
@@ -860,7 +871,7 @@ sanitizer_buffer_init
       sanitizer_context_map_aux_addr_dict_device_update(context, gpu_patch_liveness_aux);
     }
 
-    if (sanitizer_torch_analysis_ongpu) {
+    if (sanitizer_torch_analysis_ongpu || sanitizer_torch_view_ongpu) {
       void *gpu_patch_liveness_aux = NULL;
       void *gpu_patch_torch_liveness_aux = NULL;
 
@@ -1042,7 +1053,7 @@ sanitizer_load_callback
       HPCRUN_SANITIZER_CALL(sanitizerPatchInstructions,
       (SANITIZER_INSTRUCTION_GLOBAL_MEMORY_ACCESS, module, "sanitizer_global_memory_access_callback"));
 
-    } else if (sanitizer_torch_analysis_ongpu) {
+    } else if (sanitizer_torch_analysis_ongpu || sanitizer_torch_view_ongpu) {
       HPCRUN_SANITIZER_CALL(sanitizerAddPatchesFromFile, (HPCTOOLKIT_GPU_PATCH "gpu-patch-torch-aux.fatbin", context));
       HPCRUN_SANITIZER_CALL(sanitizerPatchInstructions,
       (SANITIZER_INSTRUCTION_GLOBAL_MEMORY_ACCESS, module, "sanitizer_global_memory_access_callback"));
@@ -1289,7 +1300,7 @@ aux_buffer_analyze
       (sanitizer_gpu_patch_aux_addr_dict_host, sanitizer_gpu_patch_buffer_host->aux, \
         sizeof(gpu_patch_aux_address_dict_t), priority_stream));
 
-  if (sanitizer_torch_analysis_ongpu) {
+  if (sanitizer_torch_analysis_ongpu || sanitizer_torch_view_ongpu) {
     HPCRUN_SANITIZER_CALL(sanitizerMemcpyDeviceToHost,
       (sanitizer_gpu_patch_torch_aux_addr_dict_host, sanitizer_gpu_patch_buffer_host->torch_aux, \
         sizeof(gpu_patch_aux_address_dict_t), priority_stream));
@@ -1478,7 +1489,7 @@ sanitizer_kernel_launch_sync
     // Reserve for debugging correctness
     // PRINT("num_records %zu\n", num_records);
     My_Set_Context(context);
-    if (sanitizer_gpu_analysis_blocks == 0 && !(sanitizer_liveness_ongpu || sanitizer_torch_analysis_ongpu)) {
+    if (sanitizer_gpu_analysis_blocks == 0 && !(sanitizer_liveness_ongpu || sanitizer_torch_analysis_ongpu || sanitizer_torch_view_ongpu)) {
       buffer_analyze(persistent_id, correlation_id, stream_id, cubin_id, mod_id, sanitizer_gpu_patch_type,
         sanitizer_gpu_patch_record_size, sanitizer_gpu_patch_buffer_host,
         sanitizer_gpu_patch_buffer_device, priority_stream);
@@ -1499,7 +1510,7 @@ sanitizer_kernel_launch_sync
     }
   }
 
-  if (sanitizer_liveness_ongpu || sanitizer_torch_analysis_ongpu) {
+  if (sanitizer_liveness_ongpu || sanitizer_torch_analysis_ongpu || sanitizer_torch_view_ongpu) {
     aux_buffer_analyze(persistent_id, correlation_id, stream_id, cubin_id, mod_id, sanitizer_gpu_patch_type,
         sanitizer_gpu_patch_record_size, sanitizer_gpu_patch_buffer_host,
         sanitizer_gpu_patch_buffer_device, priority_stream);
@@ -1627,7 +1638,8 @@ sanitizer_kernel_launch_callback
        sizeof(gpu_patch_aux_address_dict_t), priority_stream));
   }
 
-  if (sanitizer_torch_analysis_ongpu) {
+//  if (sanitizer_torch_analysis_ongpu) {
+  if (sanitizer_torch_analysis_ongpu || sanitizer_torch_view_ongpu) {
     if (sanitizer_gpu_patch_aux_addr_dict_host == NULL) {
       sanitizer_gpu_patch_aux_addr_dict_host = (gpu_patch_aux_address_dict_t *)
         hpcrun_malloc_safe(sizeof(gpu_patch_aux_address_dict_t));
@@ -1772,9 +1784,13 @@ sanitizer_subscribe_callback
               case REDSHOW_TORCH_MONITOR_ANALYSIS:
                   sanitizer_torch_monitor_analysis_enable();
                   break;
+              case REDSHOW_TORCH_VIEW_ANALYSIS:
+                  sanitizer_torch_view_analysis_enable();
+                  break;
           }
+          redshow_tool_dtoh_register(sanitizer_dtoh);
           /** -------- */
-	  sanitizer_context_creation_flag = true;
+	      sanitizer_context_creation_flag = true;
           break;
         }
       case SANITIZER_CBID_RESOURCE_CONTEXT_CREATION_FINISHED:
@@ -2237,6 +2253,7 @@ sanitizer_memory_heatmap_analysis_enable()
 void
 sanitizer_memory_liveness_analysis_enable()
 {
+    printf("Enter Sanitizer Liveness enable \n");
   redshow_analysis_enable(REDSHOW_ANALYSIS_MEMORY_LIVENESS);
 
   char dir_name[PATH_MAX];
@@ -2284,6 +2301,26 @@ sanitizer_torch_monitor_analysis_enable()
   sanitizer_gpu_patch_record_size = sizeof(gpu_patch_record_address_t);
 }
 
+/**
+ * enable torch_view
+ *
+ * */
+void
+sanitizer_torch_view_analysis_enable()
+{
+  redshow_analysis_enable(REDSHOW_ANALYSIS_TORCH_VIEW);
+  sanitizer_analysis_async = false;
+
+  char dir_name[PATH_MAX];
+  output_dir_config(dir_name, "/torch_view/");
+
+  redshow_output_dir_config(REDSHOW_ANALYSIS_TORCH_VIEW, dir_name);
+  // sanitizer_gpu_analysis_type = GPU_PATCH_TYPE_ADDRESS_ANALYSIS;
+  // sanitizer_gpu_analysis_record_size = sizeof(gpu_patch_analysis_address_t);
+  sanitizer_gpu_patch_type = GPU_PATCH_TYPE_ADDRESS_PATCH;
+  sanitizer_gpu_patch_record_size = sizeof(gpu_patch_record_address_t);
+}
+
 
 void
 sanitizer_callbacks_subscribe() 
@@ -2296,11 +2333,17 @@ sanitizer_callbacks_subscribe()
 
   if (sanitizer_torch_analysis || sanitizer_torch_analysis_ongpu) {
     redshow_torch_enable();
-
     redshow_get_op_id_register(gpu_correlation_id);
   }
 
-//  redshow_tool_dtoh_register(sanitizer_dtoh);
+  /**
+   * enable the torch_view 'driver'
+   */
+  if (sanitizer_torch_view || sanitizer_torch_view_ongpu) {
+    redshow_torch_view_enable();
+    redshow_get_op_id_register(gpu_correlation_id);
+  }
+  //  redshow_tool_dtoh_register(sanitizer_dtoh);
 
   HPCRUN_SANITIZER_CALL(sanitizerSubscribe,
     (&sanitizer_subscriber_handle, sanitizer_subscribe_callback, NULL));
@@ -2528,6 +2571,20 @@ sanitizer_torch_analysis_ongpu_config(int torch_ongpu)
 {
   sanitizer_torch_analysis_ongpu = torch_ongpu == 1 ? true : false;
 }
+
+void
+sanitizer_torch_view_config(int torch_view)
+{
+  sanitizer_torch_view = torch_view == 1 ? true : false;
+}
+
+
+void
+sanitizer_torch_view_ongpu_config(int torch_view_ongpu)
+{
+  sanitizer_torch_view_ongpu = torch_view_ongpu == 1 ? true : false;
+}
+
 
 // cpu thread end
 void

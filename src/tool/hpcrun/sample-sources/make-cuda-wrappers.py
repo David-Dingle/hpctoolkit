@@ -415,7 +415,7 @@ if sys.argv[1] == 'driver':
 elif sys.argv[1] == 'runtime':
 	lines = re.finditer(cudaPattern,inFile, re.MULTILINE)
 else:
-	print 'Invalid pattern'
+	print('Invalid pattern')
 	exit(-1)
 
 

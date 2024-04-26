@@ -13,17 +13,12 @@ typedef enum redshow_init_analysis{
   REDSHOW_MEMORY_LIVENESS_ANALYSIS,
   REDSHOW_DATA_DEPENDENCY_ANALYSIS,
   REDSHOW_TORCH_MONITOR_ANALYSIS,
+  REDSHOW_TORCH_VIEW_ANALYSIS,
 } redshow_init_analysis_t;
 
-static redshow_init_analysis_t init_analysis = REDSHOW_UNDEFINED_ANALYSIS;
+redshow_init_analysis_t get_init_analysis();
 
-static redshow_init_analysis_t get_init_analysis(){
-  return init_analysis;
-}
-
-static set_init_analysis(redshow_init_analysis_t val){
-  init_analysis = val;
-}
+void set_init_analysis(redshow_init_analysis_t val);
 
 /**
  * --------------------------------------------
@@ -60,6 +55,9 @@ sanitizer_data_dependency_analysis_enable();
 
 void 
 sanitizer_torch_monitor_analysis_enable();
+
+void
+sanitizer_torch_view_analysis_enable();
 
 // for sub-allocation callback
 void
@@ -123,7 +121,13 @@ void
 sanitizer_torch_analysis_config(int torch_analysis);
 
 void
-sanitizer_torch_analysis_ongpu_config(int torch_analysis);
+sanitizer_torch_analysis_ongpu_config(int torch_ongpu);
+
+void
+sanitizer_torch_view_config(int torch_view);
+
+void
+sanitizer_torch_view_ongpu_config(int torch_view_ongpu);
 
 size_t
 sanitizer_gpu_patch_record_num_get();
