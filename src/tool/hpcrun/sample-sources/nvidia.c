@@ -92,8 +92,6 @@
 #include <hpcrun/utilities/tokenize.h>
 #include <hpcrun/thread_data.h>
 
-
-
 /******************************************************************************
  * macros
  *****************************************************************************/
@@ -680,7 +678,6 @@ METHOD_FN(process_event_list, int lush_metrics)
       //sanitizer_torch_view_analysis_enable();
       set_init_analysis(REDSHOW_TORCH_VIEW_ANALYSIS);
     }
-
     // Register sanitizer callbacks
     sanitizer_callbacks_subscribe();
 
