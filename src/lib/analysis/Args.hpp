@@ -149,6 +149,7 @@ public:
   std::vector<std::string> memoryProfileFiles;  // for memory profile
   std::vector<std::string> memoryLivenessFiles; // for liveness
   std::vector<std::string> torchMonitorFiles; // for torchmonitor
+  std::vector<std::string> torchViewFiles;
 
   bool doNormalizeTy;
 

@@ -1252,6 +1252,7 @@ makeDatabase(Prof::CallPath::Profile& prof, const Analysis::Args& args)
   moveFiles(args.memoryProfileFiles);
   moveFiles(args.memoryLivenessFiles);
   moveFiles(args.torchMonitorFiles);
+  moveFiles(args.torchViewFiles);
   moveFiles(args.redundancyFiles);
   moveFiles(args.valuePatternFiles);
 }

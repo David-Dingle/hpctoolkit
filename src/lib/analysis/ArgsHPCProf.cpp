@@ -514,6 +514,12 @@ ArgsHPCProf::parse(int argc, const char* const argv[], AppType type)
         find_files(torchMonitorFiles, torch_monitor_dir, ".csv");
       }
 
+      // for torch view
+      const std::string torch_view_dir = profileFiles[i] + "/torch_view";
+      if (is_directory(torch_view_dir)) {
+        find_files(torchViewFiles, torch_view_dir, ".csv");
+      }
+
       const std::string redundancy_dir = profileFiles[i] + "/redundancy";
       if (is_directory(redundancy_dir)) {
         find_files(redundancyFiles, redundancy_dir, ".csv");

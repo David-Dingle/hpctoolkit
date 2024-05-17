@@ -79,6 +79,7 @@ using std::string;
 #include <lib/analysis/CallPath-MemoryProfile.hpp>
 #include <lib/analysis/CallPath-MemoryLiveness.hpp>
 #include <lib/analysis/CallPath-TorchMonitor.hpp>
+#include <lib/analysis/CallPath-TorchView.hpp>
 #include <lib/analysis/advisor/GPUInstruction.hpp>
 #include <lib/analysis/CallPath.hpp>
 #include <lib/analysis/Util.hpp>
@@ -221,6 +222,9 @@ realmain(int argc, char* const* argv)
   Analysis::CallPath::analyzeMemoryLivenessMain(*prof, args.memoryLivenessFiles);
 
   Analysis::CallPath::analyzeTorchMonitorMain(*prof, args.torchMonitorFiles);
+
+  Analysis::CallPath::analyzeTorchViewMain(*prof, args.torchViewFiles);
+
 
 
   // Do not transform CFG in this sanitizer
