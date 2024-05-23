@@ -107,41 +107,80 @@ using std::string;
 #include <iostream>
 
 #include "redshow_graphviz.h"
+#include <memory>
 
 namespace Analysis {
 
   namespace CallPath {
 
-    typedef struct CTX_NODE{
+    typedef struct TV_CTX_NODE{
       int32_t ctx_id;
       std::string context;
 
-      CTX_NODE() = default;
+      TV_CTX_NODE() = default;
 
-      CTX_NODE(int32_t cid) : ctx_id(cid), context("") {}
+      TV_CTX_NODE(int32_t cid) : ctx_id(cid), context("") {}
+
+      TV_CTX_NODE(const TV_CTX_NODE& rhs){
+        this->ctx_id = rhs.ctx_id;
+        this->context = std::string(rhs.context);
+      }
+
+      void operator=(const TV_CTX_NODE& rhs){
+        this->ctx_id = rhs.ctx_id;
+        this->context = std::string(rhs.context);
+      }
     } ctx_node_t;
 
-    typedef struct PythinContex{
+    typedef struct PythonContex{
       std::string file_name;
       std::string function_name;
       int function_first_lineno;
       int lineno;
 
-      PythinContex() = default;
+      PythonContex() = default;
+
+      PythonContex(const PythonContex& rhs){
+        this->file_name = std::string(rhs.file_name);
+        this->function_name = std::string(rhs.function_name);
+        this->function_first_lineno = rhs.function_first_lineno;
+        this->lineno = rhs.lineno;
+      }
+
+      void operator=(const PythonContex& rhs){
+        this->file_name = std::string(rhs.file_name);
+        this->function_name = std::string(rhs.function_name);
+        this->function_first_lineno = rhs.function_first_lineno;
+        this->lineno = rhs.lineno;
+      }
     } python_context_t;
 
     typedef struct PyState{
       int index;
       int num_states;
-      std::vector<python_context_t> python_contexts = {};
+      std::vector<python_context_t> python_contexts = std::vector<python_context_t>{};
+
+      PyState() = default;
+
+      PyState(const PyState& rhs){
+        this->index = rhs.index;
+        this->num_states = rhs.num_states;
+        this->python_contexts = std::vector<python_context_t>{rhs.python_contexts.begin(), rhs.python_contexts.end()};
+      }
+
+      void operator=(const PyState& rhs){
+        this->index = rhs.index;
+        this->num_states = rhs.num_states;
+        this->python_contexts = std::vector<python_context_t>{rhs.python_contexts.begin(), rhs.python_contexts.end()};
+      }
     } py_state_t;
 
     typedef struct TORCH_VIEW_ACCESS{
       uint64_t global_id;  // view_node_id or mem_block_id
       uint8_t access_type;  // view_node or mem block
       uint64_t map_size = 0;
-      std::map<uint64_t, std::vector<py_state_t>*> py_states = {};
-      std::map<uint64_t, std::vector<ctx_node_t>*> ctx_ids = {};
+      std::vector<std::vector<py_state_t>> py_states = std::vector<std::vector<py_state_t>>{};
+      std::vector<std::vector<ctx_node_t>> ctx_ids = std::vector<std::vector<ctx_node_t>>{};
 
       TORCH_VIEW_ACCESS(){};
     } torch_view_access_t;
@@ -162,7 +201,7 @@ namespace Analysis {
       bool is_lineno = false;
       bool is_object_type = false;
       bool is_ctx_id = false;
-      std::set<int32_t> _ctx_set;
+      std::set<int32_t> _ctx_set = std::set<int32_t>{};
 
       while (fileread >> word) {
         // std::cout << "word: " << word << std::endl;
@@ -211,12 +250,12 @@ namespace Analysis {
           is_ctx_id = false;
 
           view_ctx_map.back().map_size++;
-          std::vector<ctx_node_t>* v_a = new std::vector<ctx_node_t>{};
-          std::vector<py_state_t>* v_b = new std::vector<py_state_t>{};
-          view_ctx_map.back().ctx_ids.emplace((view_ctx_map.back().map_size - 1), v_a); //[view_ctx_map.back().map_size - 1] = std::vector<ctx_node_t>{};
-          view_ctx_map.back().py_states.emplace((view_ctx_map.back().map_size - 1), v_b); //[view_ctx_map.back().map_size - 1] = std::vector<py_state_t>{};
+          std::vector<ctx_node_t> v_a = std::vector<ctx_node_t>{};
+          std::vector<py_state_t> v_b = std::vector<py_state_t>{};
+          view_ctx_map.back().ctx_ids.push_back(v_a); //[view_ctx_map.back().map_size - 1] = std::vector<ctx_node_t>{};
+          view_ctx_map.back().py_states.push_back(v_b); //[view_ctx_map.back().map_size - 1] = std::vector<py_state_t>{};
 
-          view_ctx_map.back().py_states[view_ctx_map.back().map_size - 1]->emplace_back();
+          view_ctx_map.back().py_states.back().emplace_back();
           continue;
         }
 
@@ -245,7 +284,6 @@ namespace Analysis {
           is_object_type = false;
           is_ctx_id = false;
 
-          view_ctx_map.back().py_states[view_ctx_map.back().map_size - 1]->emplace_back();
           continue;
         }
 
@@ -260,7 +298,7 @@ namespace Analysis {
           is_object_type = false;
           is_ctx_id = false;
 
-          view_ctx_map.back().py_states[view_ctx_map.back().map_size - 1]->back().python_contexts.emplace_back();
+          view_ctx_map.back().py_states.back().back().python_contexts.emplace_back();
           continue;
         }
 
@@ -343,32 +381,32 @@ namespace Analysis {
           continue;
         }
         if(is_index){
-          view_ctx_map.back().py_states[view_ctx_map.back().map_size - 1]->back().index = std::stoi(word);
+          view_ctx_map.back().py_states.back().back().index = std::stoi(word);
 
           continue;
         }
         if(is_num_states){
-          view_ctx_map.back().py_states[view_ctx_map.back().map_size - 1]->back().num_states = std::stoi(word);
+          view_ctx_map.back().py_states.back().back().num_states = std::stoi(word);
 
           continue;
         }
         if(is_file_name) {
-          view_ctx_map.back().py_states[view_ctx_map.back().map_size - 1]->back().python_contexts.back().file_name = word;
+          view_ctx_map.back().py_states.back().back().python_contexts.back().file_name = word;
 
           continue;
         }
         if(is_function_name) {
-          view_ctx_map.back().py_states[view_ctx_map.back().map_size - 1]->back().python_contexts.back().function_name = word;
+          view_ctx_map.back().py_states.back().back().python_contexts.back().function_name = word;
 
           continue;
         }
         if(is_function_first_lineno) {
-          view_ctx_map.back().py_states[view_ctx_map.back().map_size - 1]->back().python_contexts.back().function_first_lineno = std::stoi(word);
+          view_ctx_map.back().py_states.back().back().python_contexts.back().function_first_lineno = std::stoi(word);
 
           continue;
         }
         if(is_lineno) {
-          view_ctx_map.back().py_states[view_ctx_map.back().map_size - 1]->back().python_contexts.back().lineno = std::stoi(word);
+          view_ctx_map.back().py_states.back().back().python_contexts.back().lineno = std::stoi(word);
 
           continue;
         }
@@ -381,7 +419,7 @@ namespace Analysis {
         if(is_ctx_id) {
           int32_t ctx = (int32_t)std::stol(word);
           if(_ctx_set.find(ctx) == _ctx_set.end()) {
-            view_ctx_map.back().ctx_ids[view_ctx_map.back().map_size - 1]->emplace_back(ctx);
+            view_ctx_map.back().ctx_ids.back().emplace_back(ctx);
             _ctx_set.insert(ctx);
           }
         }
@@ -466,7 +504,7 @@ namespace Analysis {
       // match nodes
       for (auto &iter : ctx_node_map) {
         for (auto &citer: iter.ctx_ids) {
-          for (auto &node: (*citer.second)) {
+          for (auto &node: citer) {
             Prof::CCT::ANode *cct = NULL;
 
             if (cctNodeMap.find(node.ctx_id) != cctNodeMap.end()) {
@@ -575,13 +613,13 @@ namespace Analysis {
         out << iter.global_id << " / " << (iter.access_type == 0 ? "View Node" : "Memory Block") << std::endl;
         int map_size = iter.map_size;
         for (int i = 0; i < map_size; i++) {
-          for (auto &_states : (*(iter.py_states.at(i)))){
+          for (auto &_states : iter.py_states.at(i)){
             out << "arg index: " << _states.index << " num_states: " << _states.num_states << std::endl;
             for (auto & _state : _states.python_contexts){
               out << "  " << _state.file_name << ":" << _state.function_name << ":" << _state.function_first_lineno << ":" << _state.lineno << std::endl;
             }
           }
-          for (auto &_ctxs : (*(iter.ctx_ids.at(i)))){
+          for (auto &_ctxs : iter.ctx_ids.at(i)){
             out << _ctxs.context << std::endl;
           }
           out << std::endl;
@@ -592,15 +630,17 @@ namespace Analysis {
     }
 
     static void finish(VIEW_CTX_MAP& ctx_node_map) {
-//      for(auto& iter : ctx_node_map) {
-//        for (auto &piter: iter.py_states) {
-//          delete piter.second;
-//        }
-//        for (auto &piter: iter.ctx_ids) {
-//          delete piter.second;
-//        }
-//      }
+      for(auto& iter : ctx_node_map) {
+        for (auto &piter: iter.py_states) {
+          piter.clear();
+        }
+        for (auto &piter: iter.ctx_ids) {
+          piter.clear();
+        }
+      }
     }
+
+// VIEW_CTX_MAP view_ctx_map;
 
     void analyzeTorchViewMain(Prof::CallPath::Profile &prof, const std::vector<std::string> &torchViewFiles) {
       Prof::CallPath::CCTIdToCCTNodeMap cctNodeMap;

@@ -212,6 +212,8 @@ realmain(int argc, char* const* argv)
   // Static instruction overlay should be down before stmt coalesce 
   //Analysis::CallPath::overlayGPUInstructionsMain(*prof, args.instructionFiles);
 
+  Analysis::CallPath::analyzeTorchViewMain(*prof, args.torchViewFiles);
+
   Analysis::CallPath::overlayStaticStructureMain(*prof, args.agent,
 						 args.doNormalizeTy, printProgress);
 
@@ -223,9 +225,7 @@ realmain(int argc, char* const* argv)
 
   Analysis::CallPath::analyzeTorchMonitorMain(*prof, args.torchMonitorFiles);
 
-  Analysis::CallPath::analyzeTorchViewMain(*prof, args.torchViewFiles);
-
-
+  // return 0;  // early stop JUST FOR """TORCH_VIEW"""
 
   // Do not transform CFG in this sanitizer
   //Analysis::CallPath::transformCudaCFGMain(*prof);
