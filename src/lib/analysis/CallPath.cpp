@@ -665,6 +665,33 @@ overlayStaticStructure(Prof::CCT::ANode* node,
       
       n->structure(strct);
 
+      // // XJ Ding debug starts
+      // for (VMAIntervalSet::iterator it1 = strct->vmaSet().begin();
+	    //       it1 != strct->vmaSet().end(); ++it1){
+      //   const VMAInterval& ival = *it1;
+      //   // std::cout << "beg: " << std::hex << (uint)ival.beg() << std::endl;
+      //   // std::cout << "end: " << std::hex <<(uint)ival.end() << std::endl;
+      //   std::cout << ival.toString() << std::endl;
+      // }
+
+      // Prof::CCT::ProcFrm *proc_frm = n->ancestorProcFrm();
+      // if (proc_frm != NULL) {
+      //   auto *strct = n->structure();
+      //   // if (strct->ancestorAlien()) {
+      //   //   auto alien_st = getInlineStack(strct);
+      //   //   for (auto &name : alien_st) {
+      //   //   // Get inline call stack
+      //   //     std::cout << "inline call stack: " << name << std::endl;
+      //   //   }
+      //   // }
+      //   auto *file_struct = strct->ancestorFile();
+      //   auto file_name = file_struct->name();
+      //   auto line = std::to_string(strct->begLine());
+      //   auto name = file_name + ":" + line + "\t <op>";
+      //   std::cout << name << std::endl;
+      // }
+      // // xj Ding debug ends
+
       //strct->demandMetric(CallPath::Profile::StructMetricIdFlg) += 1.0;
 
       DIAG_MsgIf(0, "overlayStaticStructure: dyn (" << n_dyn->lmId() << ", " << hex << lm_ip << ") --> struct " << strct << dec << " " << strct->toStringMe());

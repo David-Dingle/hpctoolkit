@@ -404,11 +404,21 @@ void analyzeTorchMonitorMain(Prof::CallPath::Profile &prof, const std::vector<st
   Prof::CCT::ANodeIterator prof_it(prof.cct()->root(), NULL/*filter*/, false/*leavesOnly*/,
     IteratorStack::PreOrder);
   for (Prof::CCT::ANode *n = NULL; (n = prof_it.current()); ++prof_it) {
+// start setting 2
+        // Invoke [overlayStaticStructure] (load per module if needed); get cubin node n's ancestors recursively 
+    // n = n->ancestor(Prof::CCT::ANode::TyProcFrm); 
+// end setting 2
     Prof::CCT::ADynNode* n_dyn = dynamic_cast<Prof::CCT::ADynNode*>(n);
     if (n_dyn) {
       cctNodeMap.insert(std::make_pair(n_dyn->cpId(), n));
     }
   }
+  // start
+      std::cout << "SIZE: " << cctNodeMap.size() << std::endl;
+      for (auto &iter : cctNodeMap){
+        std::cout << "cct_id: " << iter.first << std::endl;
+      }
+// end 
 
   for (auto &file : torch_monitor_files) {
     

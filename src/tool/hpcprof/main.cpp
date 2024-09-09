@@ -212,10 +212,12 @@ realmain(int argc, char* const* argv)
   // Static instruction overlay should be down before stmt coalesce 
   //Analysis::CallPath::overlayGPUInstructionsMain(*prof, args.instructionFiles);
 
-  Analysis::CallPath::analyzeTorchViewMain(*prof, args.torchViewFiles);
+  // Analysis::CallPath::analyzeTorchViewMain(*prof, args.torchViewFiles);
 
   Analysis::CallPath::overlayStaticStructureMain(*prof, args.agent,
 						 args.doNormalizeTy, printProgress);
+
+  Analysis::CallPath::analyzeTorchViewMain(*prof, args.torchViewFiles);           
 
   Analysis::CallPath::analyzeDataFlowMain(*prof, args.dataFlowFiles);
 

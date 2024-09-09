@@ -159,6 +159,7 @@ namespace Analysis {
       int index;
       int num_states;
       std::vector<python_context_t> python_contexts = std::vector<python_context_t>{};
+      std::string hash;
 
       PyState() = default;
 
@@ -199,6 +200,7 @@ namespace Analysis {
       bool is_function_name = false;
       bool is_function_first_lineno = false;
       bool is_lineno = false;
+      bool is_pytates_hash = false;
       bool is_object_type = false;
       bool is_ctx_id = false;
       std::set<int32_t> _ctx_set = std::set<int32_t>{};
@@ -214,8 +216,27 @@ namespace Analysis {
           is_function_name = false;
           is_function_first_lineno = false;
           is_lineno = false;
+          is_pytates_hash = false;
           is_object_type = false;
           is_ctx_id = false;
+
+          if (!view_ctx_map.empty()) { // skip the first loop when the map is empty
+            if (view_ctx_map.back().ctx_ids.empty()) { 
+              view_ctx_map.pop_back();  // if the block is empty, remove the block
+            } else {
+              for (int it = (view_ctx_map.back().ctx_ids.size() - 1); it >= 0; --it) {  // check if any pystate got no ctx_id, then remove them both
+                if (view_ctx_map.back().ctx_ids.at(it).empty() || (view_ctx_map.back().ctx_ids.at(it).size() == 1 
+                                                                    && 
+                                                                  view_ctx_map.back().ctx_ids.at(it).at(0).ctx_id == 0)) {
+                  std::cout << "branch is taken" << std::endl;
+                  view_ctx_map.back().py_states.erase(view_ctx_map.back().py_states.begin() + it);
+                  view_ctx_map.back().ctx_ids.erase(view_ctx_map.back().ctx_ids.begin() + it);
+                  view_ctx_map.back().map_size--;
+                }
+              }
+
+            }
+          }
 
           view_ctx_map.emplace_back();
           continue;
@@ -229,6 +250,7 @@ namespace Analysis {
           is_function_name = false;
           is_function_first_lineno = false;
           is_lineno = false;
+          is_pytates_hash = false;
           is_object_type = false;
           is_ctx_id = false;
 
@@ -246,6 +268,7 @@ namespace Analysis {
           is_function_name = false;
           is_function_first_lineno = false;
           is_lineno = false;
+          is_pytates_hash = false;
           is_object_type = false;
           is_ctx_id = false;
 
@@ -267,6 +290,7 @@ namespace Analysis {
           is_function_name = false;
           is_function_first_lineno = false;
           is_lineno = false;
+          is_pytates_hash = false;
           is_object_type = false;
           is_ctx_id = false;
 
@@ -281,6 +305,7 @@ namespace Analysis {
           is_function_name = false;
           is_function_first_lineno = false;
           is_lineno = false;
+          is_pytates_hash = false;
           is_object_type = false;
           is_ctx_id = false;
 
@@ -295,6 +320,7 @@ namespace Analysis {
           is_function_name = false;
           is_function_first_lineno = false;
           is_lineno = false;
+          is_pytates_hash = false;
           is_object_type = false;
           is_ctx_id = false;
 
@@ -310,6 +336,7 @@ namespace Analysis {
           is_function_name = true;
           is_function_first_lineno = false;
           is_lineno = false;
+          is_pytates_hash = false;
           is_object_type = false;
           is_ctx_id = false;
 
@@ -324,6 +351,7 @@ namespace Analysis {
           is_function_name = false;
           is_function_first_lineno = true;
           is_lineno = false;
+          is_pytates_hash = false;
           is_object_type = false;
           is_ctx_id = false;
 
@@ -338,6 +366,22 @@ namespace Analysis {
           is_function_name = false;
           is_function_first_lineno = false;
           is_lineno = true;
+          is_pytates_hash = false;
+          is_object_type = false;
+          is_ctx_id = false;
+
+          continue;
+        }
+
+        if (word == "pytates_hash"){
+          is_id = false;
+          is_index = false;
+          is_num_states = false;
+          is_file_name = false;
+          is_function_name = false;
+          is_function_first_lineno = false;
+          is_lineno = false;
+          is_pytates_hash = true;
           is_object_type = false;
           is_ctx_id = false;
 
@@ -352,6 +396,7 @@ namespace Analysis {
           is_function_name = false;
           is_function_first_lineno = false;
           is_lineno = false;
+          is_pytates_hash = false;
           is_object_type = true;
           is_ctx_id = false;
 
@@ -366,6 +411,7 @@ namespace Analysis {
           is_function_name = false;
           is_function_first_lineno = false;
           is_lineno = false;
+          is_pytates_hash = false;
           is_object_type = false;
           is_ctx_id = true;
 
@@ -410,6 +456,13 @@ namespace Analysis {
 
           continue;
         }
+
+        if(is_pytates_hash) {
+          view_ctx_map.back().py_states.back().back().hash = word;
+
+          continue;
+        }
+
         if(is_object_type) {
           uint8_t type = std::stoul(word);
           view_ctx_map.back().access_type = type;
@@ -615,6 +668,7 @@ namespace Analysis {
         for (int i = 0; i < map_size; i++) {
           for (auto &_states : iter.py_states.at(i)){
             out << "arg index: " << _states.index << " num_states: " << _states.num_states << std::endl;
+            out << " pystates_hash: " << _states.hash << std::endl;
             for (auto & _state : _states.python_contexts){
               out << "  " << _state.file_name << ":" << _state.function_name << ":" << _state.function_first_lineno << ":" << _state.lineno << std::endl;
             }
@@ -648,11 +702,20 @@ namespace Analysis {
       Prof::CCT::ANodeIterator prof_it(prof.cct()->root(), NULL/*filter*/, false/*leavesOnly*/,
                                        IteratorStack::PreOrder);
       for (Prof::CCT::ANode *n = NULL; (n = prof_it.current()); ++prof_it) {
+// start
+       //n = n->ancestor(Prof::CCT::ANode::TyProcFrm); 
+// end
         Prof::CCT::ADynNode* n_dyn = dynamic_cast<Prof::CCT::ADynNode*>(n);
         if (n_dyn) {
           cctNodeMap.insert(std::make_pair(n_dyn->cpId(), n));
         }
       }
+// start
+      std:: cout << "SIZE: " << cctNodeMap.size() << std::endl;
+      for (auto &iter : cctNodeMap){
+        std:: cout << "cct_id: " << iter.first << std::endl;
+      }
+// end 
 
       for (auto &file : torchViewFiles) {
 
