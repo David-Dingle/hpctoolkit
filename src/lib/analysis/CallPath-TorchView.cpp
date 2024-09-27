@@ -116,6 +116,7 @@ namespace Analysis {
     typedef struct TV_CTX_NODE{
       int32_t ctx_id;
       std::string context;
+      std::vector<uint64_t> pcs;
 
       TV_CTX_NODE() = default;
 
@@ -203,6 +204,8 @@ namespace Analysis {
       bool is_pytates_hash = false;
       bool is_object_type = false;
       bool is_ctx_id = false;
+      bool is_pcs = false;
+
       std::set<int32_t> _ctx_set = std::set<int32_t>{};
 
       while (fileread >> word) {
@@ -219,6 +222,7 @@ namespace Analysis {
           is_pytates_hash = false;
           is_object_type = false;
           is_ctx_id = false;
+          is_pcs = false;
 
           if (!view_ctx_map.empty()) { // skip the first loop when the map is empty
             if (view_ctx_map.back().ctx_ids.empty()) { 
@@ -253,6 +257,7 @@ namespace Analysis {
           is_pytates_hash = false;
           is_object_type = false;
           is_ctx_id = false;
+          is_pcs = false;
 
 //          view_ctx_map.back().map_size++;
 //          view_ctx_map.back().py_states[view_ctx_map.back().map_size - 1] = std::vector<py_state_t>{};
@@ -271,6 +276,7 @@ namespace Analysis {
           is_pytates_hash = false;
           is_object_type = false;
           is_ctx_id = false;
+          is_pcs = false;
 
           view_ctx_map.back().map_size++;
           std::vector<ctx_node_t> v_a = std::vector<ctx_node_t>{};
@@ -293,6 +299,7 @@ namespace Analysis {
           is_pytates_hash = false;
           is_object_type = false;
           is_ctx_id = false;
+          is_pcs = false;
 
           continue;
         }
@@ -308,6 +315,7 @@ namespace Analysis {
           is_pytates_hash = false;
           is_object_type = false;
           is_ctx_id = false;
+          is_pcs = false;
 
           continue;
         }
@@ -323,6 +331,7 @@ namespace Analysis {
           is_pytates_hash = false;
           is_object_type = false;
           is_ctx_id = false;
+          is_pcs = false;
 
           view_ctx_map.back().py_states.back().back().python_contexts.emplace_back();
           continue;
@@ -339,6 +348,7 @@ namespace Analysis {
           is_pytates_hash = false;
           is_object_type = false;
           is_ctx_id = false;
+          is_pcs = false;
 
           continue;
         }
@@ -354,6 +364,7 @@ namespace Analysis {
           is_pytates_hash = false;
           is_object_type = false;
           is_ctx_id = false;
+          is_pcs = false;
 
           continue;
         }
@@ -369,6 +380,7 @@ namespace Analysis {
           is_pytates_hash = false;
           is_object_type = false;
           is_ctx_id = false;
+          is_pcs = false;
 
           continue;
         }
@@ -384,6 +396,7 @@ namespace Analysis {
           is_pytates_hash = true;
           is_object_type = false;
           is_ctx_id = false;
+          is_pcs = false;
 
           continue;
         }
@@ -399,6 +412,7 @@ namespace Analysis {
           is_pytates_hash = false;
           is_object_type = true;
           is_ctx_id = false;
+          is_pcs = false;
 
           continue;
         }
@@ -414,8 +428,25 @@ namespace Analysis {
           is_pytates_hash = false;
           is_object_type = false;
           is_ctx_id = true;
+          is_pcs = false;
 
           _ctx_set.clear();
+          continue;
+        }
+
+        if (word == "pc"){
+          is_id = false;
+          is_index = false;
+          is_num_states = false;
+          is_file_name = false;
+          is_function_name = false;
+          is_function_first_lineno = false;
+          is_lineno = false;
+          is_pytates_hash = false;
+          is_object_type = false;
+          is_ctx_id = false;
+          is_pcs = true;
+
           continue;
         }
 
@@ -469,12 +500,20 @@ namespace Analysis {
 
           continue;
         }
+
         if(is_ctx_id) {
           int32_t ctx = (int32_t)std::stol(word);
           if(_ctx_set.find(ctx) == _ctx_set.end()) {
             view_ctx_map.back().ctx_ids.back().emplace_back(ctx);
             _ctx_set.insert(ctx);
           }
+
+          continue;
+        }
+
+        if(is_pcs) {
+          uint64_t pc = (uint64_t)std::stoul(word);
+          view_ctx_map.back().ctx_ids.back().back().pcs.emplace_back(pc);
         }
 
       }
@@ -674,7 +713,12 @@ namespace Analysis {
             }
           }
           for (auto &_ctxs : iter.ctx_ids.at(i)){
-            out << _ctxs.context << std::endl;
+            out << _ctxs.context; // << std::endl;
+            out << "pc:";
+            for (auto & pc : _ctxs.pcs){
+              out << " " << pc;
+            }
+            out << std::endl;
           }
           out << std::endl;
         }
