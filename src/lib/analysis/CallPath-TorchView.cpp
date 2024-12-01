@@ -117,19 +117,24 @@ namespace Analysis {
       int32_t ctx_id;
       std::string context;
       std::vector<uint64_t> pcs;
+      // uint64_t pcs;
 
       TV_CTX_NODE() = default;
 
-      TV_CTX_NODE(int32_t cid) : ctx_id(cid), context("") {}
+      TV_CTX_NODE(int32_t cid) : ctx_id(cid), context("") {
+        this->pcs = std::vector<uint64_t>{};
+      }
 
       TV_CTX_NODE(const TV_CTX_NODE& rhs){
         this->ctx_id = rhs.ctx_id;
         this->context = std::string(rhs.context);
+        this->pcs = std::vector<uint64_t>(rhs.pcs.begin(), rhs.pcs.end());
       }
 
       void operator=(const TV_CTX_NODE& rhs){
         this->ctx_id = rhs.ctx_id;
         this->context = std::string(rhs.context);
+        this->pcs = std::vector<uint64_t>(rhs.pcs.begin(), rhs.pcs.end());
       }
     } ctx_node_t;
 
@@ -506,6 +511,7 @@ namespace Analysis {
           if(_ctx_set.find(ctx) == _ctx_set.end()) {
             view_ctx_map.back().ctx_ids.back().emplace_back(ctx);
             _ctx_set.insert(ctx);
+            std::cout << ctx << " : ";
           }
 
           continue;
@@ -513,7 +519,11 @@ namespace Analysis {
 
         if(is_pcs) {
           uint64_t pc = (uint64_t)std::stoul(word);
-          view_ctx_map.back().ctx_ids.back().back().pcs.emplace_back(pc);
+          // view_ctx_map.back().ctx_ids.back().back().pcs = pc;
+          view_ctx_map.back().ctx_ids.back().back().pcs.push_back(pc);
+          std::cout << view_ctx_map.back().ctx_ids.back().back().pcs.back() << " size: "<< view_ctx_map.back().ctx_ids.back().back().pcs.size() << std::endl;
+
+          continue;
         }
 
       }
@@ -713,10 +723,13 @@ namespace Analysis {
             }
           }
           for (auto &_ctxs : iter.ctx_ids.at(i)){
+            out << "ctx_id: " << _ctxs.ctx_id << std::endl;
             out << _ctxs.context; // << std::endl;
+            // out << "pc:" << _ctxs.pcs;
+            out << "pcs_size: " << _ctxs.pcs.size() << std::endl;
             out << "pc:";
             for (auto & pc : _ctxs.pcs){
-              out << " " << pc;
+              out << " " << std::hex << pc << std::dec;
             }
             out << std::endl;
           }

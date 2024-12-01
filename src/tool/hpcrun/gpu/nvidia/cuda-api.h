@@ -94,12 +94,22 @@ typedef struct {
 } hpctoolkit_cufunc_st_t;
 
 
+#if CUDA_VERSION >= 12000
+typedef struct {
+  uint32_t unknown_field_0[1];
+  uint32_t cubin_id;
+  uint32_t mod_id;
+  uint32_t unknown_field_1[1];
+} hpctoolkit_cumod_st_t;
+;
+#else
 typedef struct {
   uint32_t cubin_id;
   uint32_t unknown_field[1];
   uint32_t mod_id;
 } hpctoolkit_cumod_st_t;
 ;
+#endif
 
 
 //*****************************************************************************

@@ -176,12 +176,12 @@ cuda_device_map_insert
  uint32_t device
 )
 {
-  cuda_device_map_entry_t *entry = cuda_device_map_entry_new(device);
-  cuda_device_property_query(device, &entry->property);
+  // cuda_device_map_entry_t *entry = cuda_device_map_entry_new(device);
+  // cuda_device_property_query(device, &entry->property);
 
-  TMSG(CUDA_DEVICE, "device map insert: id=0x%lx (record %p)", device, entry);
+  // TMSG(CUDA_DEVICE, "device map insert: id=0x%lx (record %p)", device, entry);
 
-  st_insert(&map_root, entry);
+  // st_insert(&map_root, entry);
 }
 
 

@@ -62,6 +62,8 @@
 #include <gpu-patch.h>
 #include <redshow.h>
 
+#include <hpcrun/gpu/nvidia/cubin-id-map.h>
+#include <hpcrun/gpu/gpu-function-id-map.h>
 #include <hpcrun/memory/hpcrun-malloc.h>
 
 #include "sanitizer-buffer-channel.h"

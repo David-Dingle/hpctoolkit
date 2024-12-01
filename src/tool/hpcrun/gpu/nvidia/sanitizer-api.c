@@ -2315,8 +2315,7 @@ sanitizer_torch_view_analysis_enable()
   output_dir_config(dir_name, "/torch_view/");
 
   redshow_output_dir_config(REDSHOW_ANALYSIS_TORCH_VIEW, dir_name);
-  // sanitizer_gpu_analysis_type = GPU_PATCH_TYPE_ADDRESS_ANALYSIS;
-  // sanitizer_gpu_analysis_record_size = sizeof(gpu_patch_analysis_address_t);
+  
   sanitizer_gpu_patch_type = GPU_PATCH_TYPE_ADDRESS_PATCH;
   sanitizer_gpu_patch_record_size = sizeof(gpu_patch_record_address_t);
 }
