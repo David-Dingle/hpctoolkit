@@ -61,6 +61,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <filesystem>
 
 #include <string>
 #include <climits>
@@ -112,6 +113,15 @@ using std::string;
 namespace Analysis {
 
   namespace CallPath {
+
+    inline bool is_file_exists (const std::string& name) {
+      if (FILE *file = fopen(name.c_str(), "r")) {
+        fclose(file);
+        return true;
+      } else {
+        return false;
+      }   
+    }
 
     typedef struct TV_CTX_NODE{
       int32_t ctx_id;
@@ -185,6 +195,7 @@ namespace Analysis {
     typedef struct TORCH_VIEW_ACCESS{
       uint64_t global_id;  // view_node_id or mem_block_id
       uint8_t access_type;  // view_node or mem block
+      uint64_t total_stalls = 0;
       uint64_t map_size = 0;
       std::vector<std::vector<py_state_t>> py_states = std::vector<std::vector<py_state_t>>{};
       std::vector<std::vector<ctx_node_t>> ctx_ids = std::vector<std::vector<ctx_node_t>>{};
@@ -237,7 +248,7 @@ namespace Analysis {
                 if (view_ctx_map.back().ctx_ids.at(it).empty() || (view_ctx_map.back().ctx_ids.at(it).size() == 1 
                                                                     && 
                                                                   view_ctx_map.back().ctx_ids.at(it).at(0).ctx_id == 0)) {
-                  std::cout << "branch is taken" << std::endl;
+                  // std::cout << "branch is taken" << std::endl;
                   view_ctx_map.back().py_states.erase(view_ctx_map.back().py_states.begin() + it);
                   view_ctx_map.back().ctx_ids.erase(view_ctx_map.back().ctx_ids.begin() + it);
                   view_ctx_map.back().map_size--;
@@ -511,7 +522,7 @@ namespace Analysis {
           if(_ctx_set.find(ctx) == _ctx_set.end()) {
             view_ctx_map.back().ctx_ids.back().emplace_back(ctx);
             _ctx_set.insert(ctx);
-            std::cout << ctx << " : ";
+            // std::cout << ctx << " : ";
           }
 
           continue;
@@ -519,9 +530,8 @@ namespace Analysis {
 
         if(is_pcs) {
           uint64_t pc = (uint64_t)std::stoul(word);
-          // view_ctx_map.back().ctx_ids.back().back().pcs = pc;
           view_ctx_map.back().ctx_ids.back().back().pcs.push_back(pc);
-          std::cout << view_ctx_map.back().ctx_ids.back().back().pcs.back() << " size: "<< view_ctx_map.back().ctx_ids.back().back().pcs.size() << std::endl;
+          // std::cout << view_ctx_map.back().ctx_ids.back().back().pcs.back() << " size: "<< view_ctx_map.back().ctx_ids.back().back().pcs.size() << std::endl;
 
           continue;
         }
@@ -708,16 +718,255 @@ namespace Analysis {
       }
     }
 
+    /** Work with GPA torch_view blame shiftting
+     * IFF output_dir/../../gpa-measurments/torch_view/torch_view_report.csv.context_v2 exists
+    */
+    typedef uint64_t pystates_hash_t;
+    typedef uint64_t pc_t;
+    typedef uint64_t pc_count_t;
+    typedef std::map<pc_t, pc_count_t> pc_count_map_t;
+    typedef std::map<pystates_hash_t, pc_count_map_t> STALL_WEIGHTS_MAP; //stall_weights_map_t;
+    // stall_weights_map_t stall_weights = stall_weights_map_t{};
 
-    static void outputContext(const std::string &file_name, const VIEW_CTX_MAP& ctx_node_map) {
+    void read_stall_weights_file(const std::string& file_name, uint64_t& gpa_total_stall, STALL_WEIGHTS_MAP& stall_weights) {
+      std::ifstream fileread(file_name);
+      std::string word;
+
+      bool is_total_stalls = false;
+      bool is_gpa_id = false;
+      bool is_pystates_hash = false;
+      bool is_leaf_lm_id = false;
+      bool is_lm_ip = false;
+      bool is_pcs = false;
+      bool is_count = false;
+
+      pystates_hash_t current_hash = 0;
+      pc_t current_pc = 0;
+
+      // std::cout << "Start reading from " << file_name << std::endl;
+
+      while (fileread >> word) {
+
+        if (word == "gpa_id"){
+          is_total_stalls = false;
+          is_gpa_id = true;
+          is_pystates_hash = false;
+          is_leaf_lm_id = false;
+          is_lm_ip = false;
+          is_pcs = false;
+          is_count = false;
+
+          continue;
+        }
+      
+        if (word == "pystates_hash"){
+          is_total_stalls = false;
+          is_gpa_id = false;
+          is_pystates_hash = true;
+          is_leaf_lm_id = false;
+          is_lm_ip = false;
+          is_pcs = false;
+          is_count = false;
+
+          continue;
+        }
+      
+        if (word == "leaf_lm_id"){
+          is_total_stalls = false;
+          is_gpa_id = false;
+          is_pystates_hash = false;
+          is_leaf_lm_id = true;
+          is_lm_ip = false;
+          is_pcs = false;
+          is_count = false;
+
+          continue;
+        }
+
+        if (word == "lm_ip"){
+          is_total_stalls = false;
+          is_gpa_id = false;
+          is_pystates_hash = false;
+          is_leaf_lm_id = false;
+          is_lm_ip = true;
+          is_pcs = false;
+          is_count = false;
+
+         continue;
+        }
+
+        if (word == "pc"){
+          is_total_stalls = false;
+          is_gpa_id = false;
+          is_pystates_hash = false;
+          is_leaf_lm_id = false;
+          is_lm_ip = false;
+          is_pcs = true;
+          is_count = false;
+
+          continue;
+        }
+
+        if (word == "count"){
+          is_total_stalls = false;
+          is_gpa_id = false;
+          is_pystates_hash = false;
+          is_leaf_lm_id = false;
+          is_lm_ip = false;
+          is_pcs = false;
+          is_count = true;
+
+          continue;
+        }
+
+        if (word == "total_stalls"){
+          is_total_stalls = true;
+          is_gpa_id = false;
+          is_pystates_hash = false;
+          is_leaf_lm_id = false;
+          is_lm_ip = false;
+          is_pcs = false;
+          is_count = false;
+        
+          continue;
+        }
+
+        if (is_gpa_id || is_leaf_lm_id || is_lm_ip) {
+          continue;
+        } // do nothing
+
+        if (is_total_stalls){
+          gpa_total_stall = (uint64_t)std::stoul(word);
+          continue;
+        }
+
+        if (is_pystates_hash){
+          current_hash = (uint64_t)std::stoul(word);
+          if (stall_weights.find(current_hash) == stall_weights.end()) {
+            stall_weights[current_hash] = pc_count_map_t();
+          }
+          // stall_weights[current_hash] = pc_count_map_t();
+          continue;
+        }
+
+        if (is_pcs){
+          current_pc = (uint64_t)std::stoul(word);
+          if (stall_weights[current_hash].find(current_pc) == stall_weights[current_hash].end()) {
+            stall_weights[current_hash][current_pc] = (uint64_t)0;
+          }
+          continue;
+        }
+
+        if (is_count){
+          stall_weights[current_hash][current_pc] += (uint64_t)std::stoul(word);
+          continue;
+        }
+      }
+      return;
+    }
+
+    int get_pc_stall_weights(const std::string &file_path, uint64_t& gpa_total_stall, STALL_WEIGHTS_MAP& stall_weights_map) {
+      // get file directory (parent folder)
+      std::string directoryPath;
+      const size_t last_slash_idx = file_path.rfind('/');
+      if (std::string::npos != last_slash_idx) {
+        directoryPath = file_path.substr(0, last_slash_idx);
+      }
+
+      std::string gpa_file = directoryPath.append("/../../gpa-measurements/torch_view/torch_view_report.csv.context_v2");
+      if(!is_file_exists(gpa_file)) {
+        std::cout << "Stall weights not found. " << gpa_file << std::endl;
+        return 0; // file doesn't exist
+      } else {
+        read_stall_weights_file(gpa_file, gpa_total_stall, stall_weights_map);
+        std::cout << "Read stall weights from " << gpa_file << std::endl;
+        return 1; // read data 
+      }
+    }
+
+    std::uint64_t get_pystate_total_stalls(STALL_WEIGHTS_MAP& stall_weights_map, const pystates_hash_t& pystates_hash, const torch_view_access_t& ctx_node, const int& index) {
+      std::uint64_t pystate_stalls = 0;
+      std::set<uint64_t> pc_set = std::set<uint64_t>{};
+      for (auto& ctx : ctx_node.ctx_ids.at(index)) {
+        for (auto& pc : ctx.pcs) {
+          pc_set.insert(pc);
+        }
+      }
+      // std::cout << "Global_id: " << ctx_node.global_id << std::endl;
+      // for (auto& pc : pc_set) {
+      //   std::cout << "  " << pc << std::endl;
+      // }
+      // std::cout << std::endl;
+      for (auto& [pc, count] : stall_weights_map[pystates_hash]){
+        if (pc_set.find(pc) != pc_set.end()) {
+          pystate_stalls += count;
+        }
+      }
+      // std::cout << "total node-state stalls: " << pystate_stalls << std::endl;
+      return pystate_stalls;
+    }
+
+    /**
+     * Traverse each node in "stall_weights_map";
+     * Use earch "_ctx_node.py_states.hash" is an index and search in stall_weights_map.first
+     * 
+    */
+    void handle_aggregation(VIEW_CTX_MAP& ctx_node_map, STALL_WEIGHTS_MAP& stall_weights_map) {
+      for (auto& ctx_node : ctx_node_map) {
+        int map_size = ctx_node.map_size;
+        for (int index = 0; index < map_size; index++) {
+          for (auto &_states : ctx_node.py_states.at(index)) {
+            pystates_hash_t _hash = (pystates_hash_t)std::stoul(_states.hash);
+            ctx_node.total_stalls += get_pystate_total_stalls(stall_weights_map, _hash, ctx_node, index);
+            
+          }
+        }
+        // std::cout << ctx_node.total_stalls << std::endl;
+        // std::cout << "/////" << std::endl;
+      }
+    }
+
+    void aggregate_stall_weights_by_view_node(VIEW_CTX_MAP& ctx_node_map, STALL_WEIGHTS_MAP& stall_weights_map, const std::string &file_path, uint64_t& gpa_total_stall) {
+      // Step 1: read gpa file
+      int res = get_pc_stall_weights(file_path, gpa_total_stall, stall_weights_map);
+      // Step 2: insert data into "ctx_node_map"
+      handle_aggregation(ctx_node_map, stall_weights_map);
+      // // step 3: recalculate gpa_total_stall
+      // gpa_total_stall = 0;
+      // for (auto& niter : ctx_node_map) {
+      //   gpa_total_stall += niter.total_stalls;
+      // }
+
+      // std::cout << "//**Verify STALL_WEIGHTS_MAP**//" << std::endl;
+      // for (auto & [_hash, pc_count] : stall_weights_map) {
+      //   std::cout << _hash << std::endl;
+      //   for (auto& [_pc, _count] : pc_count) {
+      //     std::cout << "  " << std::hex << _pc << " "<< std::dec << _count << std::endl;
+      //   }
+      //   std::cout << std::endl;
+      // }
+    }
+
+    static void outputContext(const std::string &file_name, const VIEW_CTX_MAP& ctx_node_map, STALL_WEIGHTS_MAP& stall_weights_map, uint64_t& gpa_total_stall) {
       std::ofstream out(file_name + ".context");
       for (auto& iter : ctx_node_map) {
+        if (iter.access_type != 0) {
+          continue;
+        }
         out << iter.global_id << " / " << (iter.access_type == 0 ? "View Node" : "Memory Block") << std::endl;
         int map_size = iter.map_size;
+        if(gpa_total_stall != 0) { 
+          out << "life time stalls: " << iter.total_stalls << " (" << (double)(100 * iter.total_stalls/gpa_total_stall) << "%)"<< std::endl;
+        }
         for (int i = 0; i < map_size; i++) {
           for (auto &_states : iter.py_states.at(i)){
             out << "arg index: " << _states.index << " num_states: " << _states.num_states << std::endl;
-            out << " pystates_hash: " << _states.hash << std::endl;
+            out << " pystates_hash: " << _states.hash;
+            if(gpa_total_stall != 0) {
+              uint64_t pystate_stalls = get_pystate_total_stalls(stall_weights_map, (pystates_hash_t)std::stoul(_states.hash), iter, i);
+              out << " stalls: " << pystate_stalls << " (" << (double)(100 * pystate_stalls/gpa_total_stall) << "%)";
+            }
+            out << std::endl;
             for (auto & _state : _states.python_contexts){
               out << "  " << _state.file_name << ":" << _state.function_name << ":" << _state.function_first_lineno << ":" << _state.lineno << std::endl;
             }
@@ -751,7 +1000,6 @@ namespace Analysis {
       }
     }
 
-// VIEW_CTX_MAP view_ctx_map;
 
     void analyzeTorchViewMain(Prof::CallPath::Profile &prof, const std::vector<std::string> &torchViewFiles) {
       Prof::CallPath::CCTIdToCCTNodeMap cctNodeMap;
@@ -759,15 +1007,12 @@ namespace Analysis {
       Prof::CCT::ANodeIterator prof_it(prof.cct()->root(), NULL/*filter*/, false/*leavesOnly*/,
                                        IteratorStack::PreOrder);
       for (Prof::CCT::ANode *n = NULL; (n = prof_it.current()); ++prof_it) {
-// start
-       //n = n->ancestor(Prof::CCT::ANode::TyProcFrm); 
-// end
         Prof::CCT::ADynNode* n_dyn = dynamic_cast<Prof::CCT::ADynNode*>(n);
         if (n_dyn) {
           cctNodeMap.insert(std::make_pair(n_dyn->cpId(), n));
         }
       }
-// start
+// start Debugging logs. remove later
       std:: cout << "SIZE: " << cctNodeMap.size() << std::endl;
       for (auto &iter : cctNodeMap){
         std:: cout << "cct_id: " << iter.first << std::endl;
@@ -777,12 +1022,16 @@ namespace Analysis {
       for (auto &file : torchViewFiles) {
 
         VIEW_CTX_MAP view_ctx_map;
+        STALL_WEIGHTS_MAP stall_weights_map; 
+        uint64_t gpa_total_stall = 0;
 
         read_memory_node(file, view_ctx_map);
 
         matchCCTNode(cctNodeMap, view_ctx_map);
 
-        outputContext(file, view_ctx_map);
+        aggregate_stall_weights_by_view_node(view_ctx_map, stall_weights_map, file, gpa_total_stall);
+
+        outputContext(file, view_ctx_map, stall_weights_map, gpa_total_stall);
 
         finish(view_ctx_map);
 
