@@ -1055,8 +1055,8 @@ cupti_device_buffer_config
   size_t value_size = sizeof(size_t);
   HPCRUN_CUPTI_CALL(cuptiActivitySetAttribute,
                    (CUPTI_ACTIVITY_ATTR_DEVICE_BUFFER_SIZE, &value_size, &buf_size));
-  HPCRUN_CUPTI_CALL(cuptiActivitySetAttribute,
-                   (CUPTI_ACTIVITY_ATTR_PROFILING_SEMAPHORE_POOL_SIZE, &value_size, &sem_size));
+//  HPCRUN_CUPTI_CALL(cuptiActivitySetAttribute,
+//                   (CUPTI_ACTIVITY_ATTR_PROFILING_SEMAPHORE_POOL_SIZE, &value_size, &sem_size));
 }
 
 
@@ -1266,8 +1266,6 @@ cupti_callbacks_unsubscribe
 {
   cupti_correlation_callback = 0;
 
-  HPCRUN_CUPTI_CALL(cuptiUnsubscribe, (cupti_subscriber));
-
   HPCRUN_CUPTI_CALL(cuptiEnableDomain,
                    (0, cupti_subscriber, CUPTI_CB_DOMAIN_DRIVER_API));
 
@@ -1276,6 +1274,8 @@ cupti_callbacks_unsubscribe
 
   HPCRUN_CUPTI_CALL(cuptiEnableDomain,
                    (0, cupti_subscriber, CUPTI_CB_DOMAIN_RESOURCE));
+
+  HPCRUN_CUPTI_CALL(cuptiUnsubscribe, (cupti_subscriber));
 }
 
 

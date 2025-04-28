@@ -2369,7 +2369,7 @@ sanitizer_callbacks_unsubscribe()
 {
   sanitizer_correlation_callback = 0;
 
-  HPCRUN_SANITIZER_CALL(sanitizerUnsubscribe, (sanitizer_subscriber_handle));
+  // HPCRUN_SANITIZER_CALL(sanitizerUnsubscribe, (sanitizer_subscriber_handle));
 
   HPCRUN_SANITIZER_CALL(sanitizerEnableDomain,
     (0, sanitizer_subscriber_handle, SANITIZER_CB_DOMAIN_DRIVER_API));
@@ -2385,6 +2385,8 @@ sanitizer_callbacks_unsubscribe()
 
   HPCRUN_SANITIZER_CALL(sanitizerEnableDomain,
     (0, sanitizer_subscriber_handle, SANITIZER_CB_DOMAIN_MEMSET));
+
+  HPCRUN_SANITIZER_CALL(sanitizerUnsubscribe, (sanitizer_subscriber_handle));
 }
 
 

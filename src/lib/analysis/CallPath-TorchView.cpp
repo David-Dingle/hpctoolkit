@@ -1020,6 +1020,9 @@ namespace Analysis {
 // end 
 
       for (auto &file : torchViewFiles) {
+        // if (file.compare("torch_view_report.csv") != 0) {
+        //   continue;
+        // }
 
         VIEW_CTX_MAP view_ctx_map;
         STALL_WEIGHTS_MAP stall_weights_map; 
