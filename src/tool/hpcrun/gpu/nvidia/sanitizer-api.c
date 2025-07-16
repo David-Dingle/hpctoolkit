@@ -114,6 +114,8 @@
 #include "sanitizer-buffer-channel.h"
 #include "sanitizer-buffer-channel-set.h"
 #include "sanitizer-function-list.h"
+#include "time.h"
+
 
 #define SANITIZER_API_DEBUG 1
 
@@ -267,6 +269,10 @@ static __thread gpu_patch_buffer_t *sanitizer_gpu_patch_buffer_host = NULL;
 static __thread gpu_patch_buffer_t *sanitizer_gpu_patch_buffer_addr_read_host = NULL;
 static __thread gpu_patch_buffer_t *sanitizer_gpu_patch_buffer_addr_write_host = NULL;
 static __thread gpu_patch_aux_address_dict_t *sanitizer_gpu_patch_aux_addr_dict_host = NULL;
+static __thread gpu_patch_aux_torchview_dict_t *sanitizer_gpu_patch_aux_torchview_dict_host = NULL;
+static __thread gpu_patch_analysis_address_t* sanitizer_gpu_patch_aux_torchview_dict_start_end_host = NULL;
+static __thread uint64_t* sanitizer_gpu_patch_aux_torchview_dict_read_pc_range_bit_map_host = NULL;
+static __thread uint64_t* sanitizer_gpu_patch_aux_torchview_dict_write_pc_range_bit_map_host = NULL;
 static __thread gpu_patch_aux_address_dict_t *sanitizer_gpu_patch_torch_aux_addr_dict_host = NULL;
 
 // Reset and device buffers are per-context
@@ -274,13 +280,23 @@ static __thread gpu_patch_buffer_t *sanitizer_gpu_patch_buffer_reset = NULL;
 static __thread gpu_patch_buffer_t *sanitizer_gpu_patch_buffer_addr_read_reset = NULL;
 static __thread gpu_patch_buffer_t *sanitizer_gpu_patch_buffer_addr_write_reset = NULL;
 static __thread gpu_patch_aux_address_dict_t *sanitizer_gpu_patch_aux_addr_dict_reset = NULL;
+static __thread gpu_patch_aux_torchview_dict_t *sanitizer_gpu_patch_aux_torchview_dict_reset = NULL;
+static __thread gpu_patch_analysis_address_t* sanitizer_gpu_patch_aux_torchview_dict_start_end_reset = NULL;
+static __thread uint64_t* sanitizer_gpu_patch_aux_torchview_dict_read_pc_range_bit_map_reset = NULL;
+static __thread uint64_t* sanitizer_gpu_patch_aux_torchview_dict_write_pc_range_bit_map_reset = NULL;
 static __thread gpu_patch_aux_address_dict_t *sanitizer_gpu_patch_torch_aux_addr_dict_reset = NULL;
 
 static __thread gpu_patch_buffer_t *sanitizer_gpu_patch_buffer_device = NULL;
 static __thread gpu_patch_buffer_t *sanitizer_gpu_patch_buffer_addr_read_device = NULL;
 static __thread gpu_patch_buffer_t *sanitizer_gpu_patch_buffer_addr_write_device = NULL;
 static __thread gpu_patch_aux_address_dict_t *sanitizer_gpu_patch_aux_addr_dict_device = NULL;
+static __thread gpu_patch_aux_torchview_dict_t *sanitizer_gpu_patch_aux_torchview_dict_device = NULL;
+static __thread gpu_patch_analysis_address_t* sanitizer_gpu_patch_aux_torchview_dict_start_end_device = NULL;
+static __thread uint64_t* sanitizer_gpu_patch_aux_torchview_dict_read_pc_range_bit_map_device = NULL;
+static __thread uint64_t* sanitizer_gpu_patch_aux_torchview_dict_write_pc_range_bit_map_device = NULL;
 static __thread gpu_patch_aux_address_dict_t *sanitizer_gpu_patch_torch_aux_addr_dict_device = NULL;
+static __thread uint32_t num_range;
+static __thread uint64_t bitmap_size;
 
 static sanitizer_correlation_callback_t sanitizer_correlation_callback =
   sanitizer_correlation_callback_dummy;
@@ -803,12 +819,20 @@ sanitizer_buffer_init
   sanitizer_gpu_patch_buffer_addr_read_device = sanitizer_context_map_entry_buffer_addr_read_device_get(entry);
   sanitizer_gpu_patch_buffer_addr_write_device = sanitizer_context_map_entry_buffer_addr_write_device_get(entry);
   sanitizer_gpu_patch_aux_addr_dict_device = sanitizer_context_map_entry_aux_addr_dict_device_get(entry);
+  sanitizer_gpu_patch_aux_torchview_dict_device = sanitizer_context_map_entry_aux_torchview_dict_device_get(entry);
+  sanitizer_gpu_patch_aux_torchview_dict_start_end_device = sanitizer_context_map_entry_aux_torchview_dict_start_end_device_get(entry);
+  sanitizer_gpu_patch_aux_torchview_dict_read_pc_range_bit_map_device = sanitizer_context_map_entry_aux_torchview_dict_read_pc_range_bit_map_device_get(entry);
+  sanitizer_gpu_patch_aux_torchview_dict_write_pc_range_bit_map_device = sanitizer_context_map_entry_aux_torchview_dict_write_pc_range_bit_map_device_get(entry);
   sanitizer_gpu_patch_torch_aux_addr_dict_device = sanitizer_context_map_entry_torch_aux_addr_dict_device_get(entry);
 
   sanitizer_gpu_patch_buffer_reset = sanitizer_context_map_entry_buffer_reset_get(entry);
   sanitizer_gpu_patch_buffer_addr_read_reset = sanitizer_context_map_entry_buffer_addr_read_reset_get(entry);
   sanitizer_gpu_patch_buffer_addr_write_reset = sanitizer_context_map_entry_buffer_addr_write_reset_get(entry);
   sanitizer_gpu_patch_aux_addr_dict_reset = sanitizer_context_map_entry_aux_addr_dict_reset_get(entry);
+  sanitizer_gpu_patch_aux_torchview_dict_reset = sanitizer_context_map_entry_aux_torchview_dict_reset_get(entry);
+  sanitizer_gpu_patch_aux_torchview_dict_start_end_reset = sanitizer_context_map_entry_aux_torchview_dict_start_end_reset_get(entry);
+  sanitizer_gpu_patch_aux_torchview_dict_read_pc_range_bit_map_reset = sanitizer_context_map_entry_aux_torchview_dict_read_pc_range_bit_map_reset_get(entry);
+  sanitizer_gpu_patch_aux_torchview_dict_write_pc_range_bit_map_reset = sanitizer_context_map_entry_aux_torchview_dict_write_pc_range_bit_map_reset_get(entry);
   sanitizer_gpu_patch_torch_aux_addr_dict_reset = sanitizer_context_map_entry_torch_aux_addr_dict_reset_get(entry);
 
   if (sanitizer_gpu_patch_buffer_device == NULL) {
@@ -871,7 +895,29 @@ sanitizer_buffer_init
       sanitizer_context_map_aux_addr_dict_device_update(context, gpu_patch_liveness_aux);
     }
 
-    if (sanitizer_torch_analysis_ongpu || sanitizer_torch_view_ongpu) {
+    if (sanitizer_torch_view_ongpu) {
+
+      /**
+       * Alloc memory here.
+       * Lazy init until kernel launch begin.
+       * bridge sanitizer_gpu_patch_aux_torchview_dict_reset to 
+       *        sanitizer_gpu_patch_aux_torchview_dict_device later
+       */
+      sanitizer_gpu_patch_aux_torchview_dict_reset = (gpu_patch_aux_torchview_dict_t *)hpcrun_malloc_safe(sizeof(gpu_patch_aux_torchview_dict_t));
+
+      HPCRUN_SANITIZER_CALL(sanitizerAlloc, (context, (void **)(&(sanitizer_gpu_patch_aux_torchview_dict_device)), sizeof(gpu_patch_aux_torchview_dict_t)));
+      HPCRUN_SANITIZER_CALL(sanitizerMemset, (sanitizer_gpu_patch_aux_torchview_dict_device, 0, sizeof(gpu_patch_aux_torchview_dict_t), priority_stream));
+      sanitizer_gpu_patch_buffer_reset->aux = sanitizer_gpu_patch_aux_torchview_dict_device;
+
+      sanitizer_context_map_aux_torchview_dict_device_update(context, sanitizer_gpu_patch_aux_torchview_dict_device);
+      // Reset_update
+      // sanitizer_context_map_aux_torchview_dict_device_update(context, gpu_patch_torchview_aux);
+      // sanitizer_context_map_aux_addr_dict_start_end_device_update(context, gpu_patch_torchview_dict_start_end);
+      // sanitizer_context_map_aux_addr_dict_read_pc_range_bit_map_device_update(context, gpu_patch_torchview_dict_read_pc_range_bit_map);
+      // sanitizer_context_map_aux_addr_dict_write_pc_range_bit_map_device_update(context, gpu_patch_torchview_dict_write_pc_range_bit_map);
+    }
+
+    if (sanitizer_torch_analysis_ongpu) {
       void *gpu_patch_liveness_aux = NULL;
       void *gpu_patch_torch_liveness_aux = NULL;
 
@@ -1053,7 +1099,12 @@ sanitizer_load_callback
       HPCRUN_SANITIZER_CALL(sanitizerPatchInstructions,
       (SANITIZER_INSTRUCTION_GLOBAL_MEMORY_ACCESS, module, "sanitizer_global_memory_access_callback"));
 
-    } else if (sanitizer_torch_analysis_ongpu || sanitizer_torch_view_ongpu) {
+    } else if (sanitizer_torch_view_ongpu) {
+      HPCRUN_SANITIZER_CALL(sanitizerAddPatchesFromFile, (HPCTOOLKIT_GPU_PATCH "gpu-patch-aux-torchview.fatbin", context));
+      HPCRUN_SANITIZER_CALL(sanitizerPatchInstructions,
+      (SANITIZER_INSTRUCTION_GLOBAL_MEMORY_ACCESS, module, "sanitizer_global_memory_access_callback"));
+
+    } else if (sanitizer_torch_analysis_ongpu) {
       HPCRUN_SANITIZER_CALL(sanitizerAddPatchesFromFile, (HPCTOOLKIT_GPU_PATCH "gpu-patch-torch-aux.fatbin", context));
       HPCRUN_SANITIZER_CALL(sanitizerPatchInstructions,
       (SANITIZER_INSTRUCTION_GLOBAL_MEMORY_ACCESS, module, "sanitizer_global_memory_access_callback"));
@@ -1290,24 +1341,59 @@ aux_buffer_analyze
     sanitizer_thread_id_local, cubin_id, mod_id, persistent_id, correlation_id, stream_id, gpu_patch_type,
     sanitizer_gpu_patch_record_num, sanitizer_analysis_async);
   gpu_patch_buffer_t *gpu_patch_buffer = sanitizer_buffer_entry_gpu_patch_buffer_get(sanitizer_buffer);
-
-
+  
   // Move host buffer to a cache
   memcpy(gpu_patch_buffer, gpu_patch_buffer_host, offsetof(gpu_patch_buffer_t, records));
 
   // copy back aux buffer
-  HPCRUN_SANITIZER_CALL(sanitizerMemcpyDeviceToHost,
+  if (sanitizer_liveness_ongpu) {
+    HPCRUN_SANITIZER_CALL(sanitizerMemcpyDeviceToHost,
       (sanitizer_gpu_patch_aux_addr_dict_host, sanitizer_gpu_patch_buffer_host->aux, \
         sizeof(gpu_patch_aux_address_dict_t), priority_stream));
+    gpu_patch_buffer->aux = sanitizer_gpu_patch_aux_addr_dict_host;
+  }
 
-  if (sanitizer_torch_analysis_ongpu || sanitizer_torch_view_ongpu) {
+  if (sanitizer_torch_view_ongpu) {
+    HPCRUN_SANITIZER_CALL(sanitizerMemcpyDeviceToHost,
+      (sanitizer_gpu_patch_aux_torchview_dict_host, sanitizer_gpu_patch_buffer_host->aux, \
+        sizeof(gpu_patch_aux_torchview_dict_t), priority_stream));
+    PRINT("Sanitizer-> Copy back sanitizer_gpu_patch_aux_torchview_dict_host %p \n", sanitizer_gpu_patch_aux_torchview_dict_host);
+    PRINT("Sanitizer-> Copy back torchview_dict_host->view_range_size %u \n", ((gpu_patch_aux_torchview_dict_t*)sanitizer_gpu_patch_aux_torchview_dict_host)->view_range_size);
+
+    if (num_range > 0){
+      HPCRUN_SANITIZER_CALL(sanitizerMemcpyDeviceToHost,
+        (sanitizer_gpu_patch_aux_torchview_dict_start_end_host, (gpu_patch_analysis_address_t *)((gpu_patch_aux_torchview_dict_t *)(sanitizer_gpu_patch_aux_torchview_dict_host))->start_end, \
+          (num_range * sizeof(gpu_patch_analysis_address_t)), priority_stream));
+      sanitizer_gpu_patch_aux_torchview_dict_host->start_end = sanitizer_gpu_patch_aux_torchview_dict_start_end_host;
+
+      HPCRUN_SANITIZER_CALL(sanitizerMemcpyDeviceToHost,
+        (sanitizer_gpu_patch_aux_torchview_dict_write_pc_range_bit_map_host, (uint64_t *)((gpu_patch_aux_torchview_dict_t *)(sanitizer_gpu_patch_aux_torchview_dict_host))->write_pc_range_bit_map, \
+          bitmap_size, priority_stream));
+      sanitizer_gpu_patch_aux_torchview_dict_host->write_pc_range_bit_map = sanitizer_gpu_patch_aux_torchview_dict_write_pc_range_bit_map_host;
+      // for (size_t i = 0; i < GPU_PATCH_TORCHVIEW_DICT_MAX_PC_SIZE * (((num_range + 64 - 1) / 64) + 1); i++) {
+      //   PRINT("Lets see write map: %lu \n", sanitizer_gpu_patch_aux_torchview_dict_host->write_pc_range_bit_map[i]);
+      // }
+      
+      HPCRUN_SANITIZER_CALL(sanitizerMemcpyDeviceToHost,
+        (sanitizer_gpu_patch_aux_torchview_dict_read_pc_range_bit_map_host, (uint64_t *)((gpu_patch_aux_torchview_dict_t *)(sanitizer_gpu_patch_aux_torchview_dict_host))->read_pc_range_bit_map, \
+          bitmap_size, priority_stream));
+      sanitizer_gpu_patch_aux_torchview_dict_host->read_pc_range_bit_map = sanitizer_gpu_patch_aux_torchview_dict_read_pc_range_bit_map_host;
+      // for (size_t i = 0; i < GPU_PATCH_TORCHVIEW_DICT_MAX_PC_SIZE * (((num_range + 64 - 1) / 64) + 1); i++) {
+      //   PRINT("Read map: %lu \n", sanitizer_gpu_patch_aux_torchview_dict_host->read_pc_range_bit_map[i]);
+      // }
+    }
+    gpu_patch_buffer->aux = sanitizer_gpu_patch_aux_torchview_dict_host;
+  }
+
+  if (sanitizer_torch_analysis_ongpu) {
     HPCRUN_SANITIZER_CALL(sanitizerMemcpyDeviceToHost,
       (sanitizer_gpu_patch_torch_aux_addr_dict_host, sanitizer_gpu_patch_buffer_host->torch_aux, \
         sizeof(gpu_patch_aux_address_dict_t), priority_stream));
     gpu_patch_buffer->torch_aux = sanitizer_gpu_patch_torch_aux_addr_dict_host;
+    gpu_patch_buffer->aux = sanitizer_gpu_patch_aux_addr_dict_host;
   }
 
-  gpu_patch_buffer->aux = sanitizer_gpu_patch_aux_addr_dict_host;
+  // gpu_patch_buffer->aux = sanitizer_gpu_patch_aux_addr_dict_host;
 
   sanitizer_buffer_channel_push(sanitizer_buffer, gpu_patch_type);
 
@@ -1511,10 +1597,14 @@ sanitizer_kernel_launch_sync
   }
 
   if (sanitizer_liveness_ongpu || sanitizer_torch_analysis_ongpu || sanitizer_torch_view_ongpu) {
+    if (sanitizer_liveness_ongpu || sanitizer_torch_analysis_ongpu) {
+      PRINT("Sanitizer-> analysis aux for liveness\n");
+    } else if (sanitizer_torch_view_ongpu) {
+      PRINT("Sanitizer-> analysis aux for torchview-ongpu\n");
+    }
     aux_buffer_analyze(persistent_id, correlation_id, stream_id, cubin_id, mod_id, sanitizer_gpu_patch_type,
         sanitizer_gpu_patch_record_size, sanitizer_gpu_patch_buffer_host,
         sanitizer_gpu_patch_buffer_device, priority_stream);
-    PRINT("Sanitizer-> analysis aux for liveness\n");
   }
 
   if (sanitizer_gpu_analysis_blocks != 0) {
@@ -1566,6 +1656,8 @@ sanitizer_kernel_launch_callback
 (
  uint64_t correlation_id,
  CUcontext context,
+ CUmodule module,  // torchview-ongpu needs this to extract pc offset and function size in advance
+ const char *functionName,  // torchview-ongpu needs this to extract pc offset and function size in advance
  Sanitizer_StreamHandle priority_stream,
  CUfunction function,
  dim3 grid_size,
@@ -1638,8 +1730,75 @@ sanitizer_kernel_launch_callback
        sizeof(gpu_patch_aux_address_dict_t), priority_stream));
   }
 
-//  if (sanitizer_torch_analysis_ongpu) {
-  if (sanitizer_torch_analysis_ongpu || sanitizer_torch_view_ongpu) {
+  if (sanitizer_torch_view_ongpu) {
+    uint64_t function_pc_offset;  //Function start program counter (PC) returned.
+    uint64_t function__size;  //Function size in bytes returned.
+    HPCRUN_SANITIZER_CALL(sanitizerGetFunctionPcAndSize, (module, functionName, &function_pc_offset, &function__size));
+
+    num_range = (uint32_t)redshow_torchview_ongpu_get_range_size();
+    bitmap_size = sizeof(uint64_t) * (function__size / 8) * (((num_range + 64 - 1) / 64) + 1);
+
+    if (sanitizer_gpu_patch_aux_torchview_dict_host == NULL) {
+      sanitizer_gpu_patch_aux_torchview_dict_host = (gpu_patch_aux_torchview_dict_t *)
+        hpcrun_malloc_safe(sizeof(gpu_patch_aux_torchview_dict_t));
+    }
+    if (!sanitizer_gpu_patch_aux_torchview_dict_reset){
+      sanitizer_gpu_patch_aux_torchview_dict_reset = (gpu_patch_aux_torchview_dict_t *)hpcrun_malloc_safe(sizeof(gpu_patch_aux_torchview_dict_t));
+    }
+
+    sanitizer_gpu_patch_aux_torchview_dict_reset->function_pc_offset = function_pc_offset;
+    sanitizer_gpu_patch_aux_torchview_dict_reset->current_read_pc_size = (function__size / 8);
+    sanitizer_gpu_patch_aux_torchview_dict_reset->current_write_pc_size = (function__size / 8);
+    sanitizer_gpu_patch_aux_torchview_dict_reset->view_range_size = num_range;
+
+    void *gpu_patch_torchview_dict_start_end = NULL;
+    void *gpu_patch_torchview_dict_read_pc_range_bit_map = NULL;
+    void *gpu_patch_torchview_dict_write_pc_range_bit_map = NULL;
+
+    HPCRUN_SANITIZER_CALL(sanitizerAlloc, (context, (void **)(&(gpu_patch_torchview_dict_start_end)), num_range * sizeof(gpu_patch_analysis_address_t)));
+    PRINT("Sanitizer-> Allocate gpu_patch_torchview_dict_start_end %p, size %zu\n", gpu_patch_torchview_dict_start_end, num_range * sizeof(gpu_patch_analysis_address_t));
+
+    HPCRUN_SANITIZER_CALL(sanitizerAlloc, (context, (void **)(&(gpu_patch_torchview_dict_read_pc_range_bit_map)), bitmap_size));
+    HPCRUN_SANITIZER_CALL(sanitizerMemset, (gpu_patch_torchview_dict_read_pc_range_bit_map, 0, bitmap_size, priority_stream));
+    PRINT("Sanitizer-> Allocate gpu_patch_torchview_dict_read_pc_range_bit_map %p, size %zu\n", gpu_patch_torchview_dict_read_pc_range_bit_map, bitmap_size);
+
+    HPCRUN_SANITIZER_CALL(sanitizerAlloc, (context, (void **)(&(gpu_patch_torchview_dict_write_pc_range_bit_map)), bitmap_size));
+    HPCRUN_SANITIZER_CALL(sanitizerMemset, (gpu_patch_torchview_dict_write_pc_range_bit_map, 0, bitmap_size, priority_stream));
+    PRINT("Sanitizer-> Allocate gpu_patch_torchview_dict_write_pc_range_bit_map %p, size %zu\n", gpu_patch_torchview_dict_write_pc_range_bit_map, bitmap_size);
+    // Update map
+    sanitizer_gpu_patch_aux_torchview_dict_reset->start_end = gpu_patch_torchview_dict_start_end;
+    sanitizer_gpu_patch_aux_torchview_dict_reset->read_pc_range_bit_map = gpu_patch_torchview_dict_read_pc_range_bit_map;
+    sanitizer_gpu_patch_aux_torchview_dict_reset->write_pc_range_bit_map = gpu_patch_torchview_dict_write_pc_range_bit_map;
+    
+    sanitizer_gpu_patch_aux_torchview_dict_read_pc_range_bit_map_host = (uint64_t *)
+      hpcrun_malloc_safe(bitmap_size); // sizeof(u64 * row * column)
+    sanitizer_gpu_patch_aux_torchview_dict_write_pc_range_bit_map_host = (uint64_t *)
+      hpcrun_malloc_safe(bitmap_size); // sizeof(u64 * row * column)
+    memset(sanitizer_gpu_patch_aux_torchview_dict_write_pc_range_bit_map_host, 0, bitmap_size);
+    memset(sanitizer_gpu_patch_aux_torchview_dict_read_pc_range_bit_map_host, 0, bitmap_size);
+
+    sanitizer_gpu_patch_aux_torchview_dict_start_end_host = (gpu_patch_analysis_address_t *)
+      hpcrun_malloc_safe(num_range * sizeof(gpu_patch_analysis_address_t)); // sizeof(u64 * row * column)
+    redshow_torchview_assemble_patch_analysis_address(sanitizer_gpu_patch_aux_torchview_dict_start_end_host);
+
+    for (size_t i = 0; i < num_range; i++) {
+      PRINT("Torchview mem range Start: %lu, %lu \n", sanitizer_gpu_patch_aux_torchview_dict_start_end_host[i].start, sanitizer_gpu_patch_aux_torchview_dict_start_end_host[i].end);
+    }
+
+    // Copy
+    HPCRUN_SANITIZER_CALL(sanitizerMemcpyHostToDeviceAsync,
+      (sanitizer_gpu_patch_aux_torchview_dict_reset->start_end, sanitizer_gpu_patch_aux_torchview_dict_start_end_host,
+       num_range * sizeof(gpu_patch_analysis_address_t), priority_stream));
+    HPCRUN_SANITIZER_CALL(sanitizerMemcpyHostToDeviceAsync,
+      (sanitizer_gpu_patch_buffer_reset->aux, sanitizer_gpu_patch_aux_torchview_dict_reset,
+       sizeof(gpu_patch_aux_torchview_dict_t), priority_stream));
+ 
+    sanitizer_context_map_aux_addr_dict_start_end_device_update(context, gpu_patch_torchview_dict_start_end);
+    sanitizer_context_map_aux_addr_dict_read_pc_range_bit_map_device_update(context, gpu_patch_torchview_dict_read_pc_range_bit_map);
+    sanitizer_context_map_aux_addr_dict_write_pc_range_bit_map_device_update(context, gpu_patch_torchview_dict_write_pc_range_bit_map);
+  }
+
+  if (sanitizer_torch_analysis_ongpu) {
     if (sanitizer_gpu_patch_aux_addr_dict_host == NULL) {
       sanitizer_gpu_patch_aux_addr_dict_host = (gpu_patch_aux_address_dict_t *)
         hpcrun_malloc_safe(sizeof(gpu_patch_aux_address_dict_t));
@@ -2057,7 +2216,7 @@ sanitizer_subscribe_callback
 
       priority_stream = sanitizer_priority_stream_get(ld->context);
 
-      sanitizer_kernel_launch_callback(correlation_id, ld->context, priority_stream, ld->function,
+      sanitizer_kernel_launch_callback(correlation_id, ld->context, ld->module, ld->functionName, priority_stream, ld->function,
         grid_size, block_size, kernel_sampling);
     } else if (cbid == SANITIZER_CBID_LAUNCH_AFTER_SYSCALL_SETUP) {
       if (sanitizer_gpu_analysis_blocks != 0 && kernel_sampling) {
@@ -2318,6 +2477,9 @@ sanitizer_torch_view_analysis_enable()
   
   sanitizer_gpu_patch_type = GPU_PATCH_TYPE_ADDRESS_PATCH;
   sanitizer_gpu_patch_record_size = sizeof(gpu_patch_record_address_t);
+  if (sanitizer_torch_view_ongpu) {
+    redshow_torchview_ongpu_set_ongpu();
+  }
 }
 
 

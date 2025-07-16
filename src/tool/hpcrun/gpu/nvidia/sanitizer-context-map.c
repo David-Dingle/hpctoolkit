@@ -37,6 +37,17 @@ struct sanitizer_context_map_entry_s {
   gpu_patch_buffer_t *buffer_addr_write_device;
   gpu_patch_aux_address_dict_t *aux_addr_dict_device;
   gpu_patch_aux_address_dict_t *torch_aux_addr_dict_device;
+
+  gpu_patch_aux_torchview_dict_t *aux_torchview_dict_device;
+  gpu_patch_analysis_address_t *aux_torchview_start_end_device;
+  uint64_t* aux_torchview_read_pc_range_bit_map_device;
+  uint64_t* aux_torchview_write_pc_range_bit_map_device;
+
+  gpu_patch_aux_torchview_dict_t *aux_torchview_dict_reset;
+  gpu_patch_analysis_address_t *aux_torchview_start_end_reset;
+  uint64_t* aux_torchview_read_pc_range_bit_map_reset;
+  uint64_t* aux_torchview_write_pc_range_bit_map_reset;
+
   gpu_patch_buffer_t *buffer_reset;
   gpu_patch_buffer_t *buffer_addr_read_reset;
   gpu_patch_buffer_t *buffer_addr_write_reset;
@@ -357,6 +368,74 @@ sanitizer_context_map_aux_addr_dict_device_update
   spinlock_unlock(&sanitizer_context_map_lock);
 }
 
+
+void
+sanitizer_context_map_aux_torchview_dict_device_update
+(
+ CUcontext context,
+ gpu_patch_aux_torchview_dict_t *aux_torchview_dict_device
+)
+{
+  spinlock_lock(&sanitizer_context_map_lock);
+
+  sanitizer_context_map_entry_t *result = sanitizer_context_map_lookup_internal(context);
+
+  result->aux_torchview_dict_device = aux_torchview_dict_device;
+
+  spinlock_unlock(&sanitizer_context_map_lock);
+}
+
+void
+sanitizer_context_map_aux_addr_dict_start_end_device_update
+(
+ CUcontext context,
+ gpu_patch_analysis_address_t *aux_torchview_start_end_device
+)
+{
+  spinlock_lock(&sanitizer_context_map_lock);
+
+  sanitizer_context_map_entry_t *result = sanitizer_context_map_lookup_internal(context);
+
+  result->aux_torchview_start_end_device = aux_torchview_start_end_device;
+
+  spinlock_unlock(&sanitizer_context_map_lock);
+}
+
+
+void
+sanitizer_context_map_aux_addr_dict_read_pc_range_bit_map_device_update
+(
+ CUcontext context,
+ uint64_t *aux_torchview_read_pc_range_bit_map_device
+)
+{
+  spinlock_lock(&sanitizer_context_map_lock);
+
+  sanitizer_context_map_entry_t *result = sanitizer_context_map_lookup_internal(context);
+
+  result->aux_torchview_read_pc_range_bit_map_device = aux_torchview_read_pc_range_bit_map_device;
+
+  spinlock_unlock(&sanitizer_context_map_lock);
+}
+
+
+void
+sanitizer_context_map_aux_addr_dict_write_pc_range_bit_map_device_update
+(
+ CUcontext context,
+ uint64_t *aux_torchview_write_pc_range_bit_map_device
+)
+{
+  spinlock_lock(&sanitizer_context_map_lock);
+
+  sanitizer_context_map_entry_t *result = sanitizer_context_map_lookup_internal(context);
+
+  result->aux_torchview_write_pc_range_bit_map_device = aux_torchview_write_pc_range_bit_map_device;
+
+  spinlock_unlock(&sanitizer_context_map_lock);
+}
+
+
 void
 sanitizer_context_map_torch_aux_addr_dict_device_update
 (
@@ -614,6 +693,48 @@ sanitizer_context_map_entry_aux_addr_dict_device_get
 }
 
 
+gpu_patch_aux_torchview_dict_t *
+sanitizer_context_map_entry_aux_torchview_dict_device_get
+(
+ sanitizer_context_map_entry_t *entry
+)
+{
+  return entry->aux_torchview_dict_device;
+}
+
+/**
+*/
+gpu_patch_analysis_address_t *
+sanitizer_context_map_entry_aux_torchview_dict_start_end_device_get
+(
+ sanitizer_context_map_entry_t *entry
+)
+{
+  return entry->aux_torchview_start_end_device;
+}
+
+uint64_t *
+sanitizer_context_map_entry_aux_torchview_dict_read_pc_range_bit_map_device_get
+(
+ sanitizer_context_map_entry_t *entry
+)
+{
+  return entry->aux_torchview_read_pc_range_bit_map_device;
+}
+
+uint64_t *
+sanitizer_context_map_entry_aux_torchview_dict_write_pc_range_bit_map_device_get
+(
+ sanitizer_context_map_entry_t *entry
+)
+{
+  return entry->aux_torchview_write_pc_range_bit_map_device;
+}
+/**
+ * 
+ * 
+*/
+
 gpu_patch_aux_address_dict_t *
 sanitizer_context_map_entry_torch_aux_addr_dict_device_get
 (
@@ -662,6 +783,47 @@ sanitizer_context_map_entry_aux_addr_dict_reset_get
 {
   return entry->aux_addr_dict_reset;
 }
+
+gpu_patch_aux_torchview_dict_t *
+sanitizer_context_map_entry_aux_torchview_dict_reset_get
+(
+ sanitizer_context_map_entry_t *entry
+)
+{
+  return entry->aux_torchview_dict_reset;
+}
+
+/**
+*/
+gpu_patch_analysis_address_t *
+sanitizer_context_map_entry_aux_torchview_dict_start_end_reset_get
+(
+ sanitizer_context_map_entry_t *entry
+)
+{
+  return entry->aux_torchview_start_end_reset;
+}
+
+uint64_t *
+sanitizer_context_map_entry_aux_torchview_dict_read_pc_range_bit_map_reset_get
+(
+ sanitizer_context_map_entry_t *entry
+)
+{
+  return entry->aux_torchview_read_pc_range_bit_map_reset;
+}
+
+uint64_t *
+sanitizer_context_map_entry_aux_torchview_dict_write_pc_range_bit_map_reset_get
+(
+ sanitizer_context_map_entry_t *entry
+)
+{
+  return entry->aux_torchview_write_pc_range_bit_map_reset;
+}
+/**
+*/
+
 
 gpu_patch_aux_address_dict_t *
 sanitizer_context_map_entry_torch_aux_addr_dict_reset_get

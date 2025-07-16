@@ -152,7 +152,7 @@ hpcrun_get_thread_data_specific(void)
 {
   thread_data_t *ret = (thread_data_t *) pthread_getspecific(_hpcrun_key);
   if (!ret){
-    monitor_real_abort();
+    //monitor_real_abort();
   }
   return ret;
 }
