@@ -205,6 +205,168 @@ namespace Analysis {
 
     typedef std::vector<torch_view_access_t> VIEW_CTX_MAP;
 
+    typedef struct Id_System{
+      private:
+        uint64_t id = 0;
+      public:
+        uint64_t get_new_id() {
+          return (++(this->id));
+        }
+    } Id_System_t;
+    
+    Id_System_t id_System = {};
+
+    enum class TokType {
+      INT,
+      LBRACE,
+      RBRACE,
+      COLON
+    };
+
+    struct Token {
+      TokType type{};
+      unsigned long long val{0}; // valid only if type == INT
+      size_t pos{0};
+    };
+
+    struct Node {
+      unsigned long long id{};
+      std::vector<Node> children;
+    };
+
+    typedef std::vector<Node> forest_t;
+    forest_t viewForest = {};
+    forest_t crossTreeRelation = {}; // Forest-typed. But actually its a group of <target, scource> edges
+    std::set<unsigned long long> seen_Id = {};
+    std::unordered_map<uint64_t, std::set<uint64_t>> seen_Edges = {};
+
+    struct ParserError : std::runtime_error { using std::runtime_error::runtime_error; };
+
+    // ---------------- Lexer ----------------
+    struct Lexer {
+        const string& s;
+        explicit Lexer(const string& src) : s(src) {}
+
+        static bool isSpace(char c) {
+            return c==' '||c=='\t'||c=='\r'||c=='\n'||c=='\f'||c=='\v';
+        }
+
+        std::vector<Token> lex() {
+          std::vector<Token> out;
+          size_t i = 0, n = s.size();
+          while (i < n) {
+            while (i < n && isSpace(s[i])) ++i;
+            if (i >= n) break;
+            char c = s[i];
+            if (c == '{') { out.push_back({TokType::LBRACE,0,i++}); continue; }
+            if (c == '}') { out.push_back({TokType::RBRACE,0,i++}); continue; }
+            if (c == ':') { out.push_back({TokType::COLON ,0,i++}); continue; }
+            if (isdigit(c)) {
+              size_t j = i;
+              while (j<n && isdigit(s[j])) ++j;
+              unsigned long long v = stoull(s.substr(i,j-i));
+              out.push_back({TokType::INT,v,i});
+              i = j;
+              continue;
+            }
+            ++i; // skip stray chars
+          }
+          return out;
+        }
+    };
+
+    // ---------------- Parser ----------------
+    struct Parser {
+      const std::vector<Token>& toks;
+      size_t i{0};
+
+      explicit Parser(const std::vector<Token>& t) : toks(t) {}
+
+      const Token* peek() const { return (i<toks.size())? &toks[i] : nullptr; }
+      const Token& take(TokType expect) {
+        const Token* p = peek();
+        if (!p) throw ParserError("Unexpected EOF");
+        if (p->type != expect) {
+            throw ParserError("Unexpected token at byte " + std::__cxx11::to_string(p->pos));
+        }
+        return toks[i++];
+      }
+
+      // Tree := INT [":"] "{" (Tree)* "}" INT
+      Node parseTree() {
+        auto openTok = take(TokType::INT);
+        unsigned long long openId = openTok.val;
+        if (peek() && peek()->type==TokType::COLON) ++i;
+        (void)take(TokType::LBRACE);
+
+        Node node;
+        node.id = openId;
+
+        while (true) {
+          if (!peek()) throw ParserError("EOF in children of "+ std::__cxx11::to_string(openId));
+          if (peek()->type==TokType::RBRACE) break;
+          if (peek()->type==TokType::INT) {
+            node.children.push_back(parseTree());
+          } else {
+            ++i;
+          }
+        }
+        (void)take(TokType::RBRACE);
+        auto closeTok = take(TokType::INT);
+        if (closeTok.val != openId) {
+          throw ParserError("Mismatched IDs: opened "+ std::__cxx11::to_string(openId)+
+                            " closed "+ std::__cxx11::to_string(closeTok.val));
+        }
+        return node;
+      }
+
+      // Forest := Tree*
+      std::vector<Node> parseForest() {
+        std::vector<Node> roots;
+        while (peek()) {
+          while (peek() && (peek()->type==TokType::RBRACE||peek()->type==TokType::COLON)) {
+            ++i;
+          }
+          if (!peek()) break;
+          if (peek()->type==TokType::INT) {
+            roots.push_back(parseTree());
+          } else {
+            ++i;
+          }
+        }
+        return roots;
+      }
+    };
+
+    static void read_node_relation(const std::string &file_path, forest_t &forest, std::string file_name) {
+
+      std::string directoryPath;
+      const size_t last_slash_idx = file_path.rfind('/');
+      if (std::string::npos != last_slash_idx) {
+        directoryPath = file_path.substr(0, last_slash_idx);
+      }
+
+      std::string forest_file = directoryPath.append(file_name);  //("/forest.txt");
+      if(!is_file_exists(forest_file)) {
+        std::cout << "forest file not found. " << forest_file << std::endl;
+      } else {
+        std::cout << "Read stall weights from " << forest_file << std::endl;
+      }
+
+      std::ifstream f(forest_file);
+      if (!f) { std::cerr << "Cannot open file\n";}
+      string text((std::istreambuf_iterator<char>(f)), {});
+
+      Lexer lex(text);
+      auto tokens = lex.lex();
+      Parser parser(tokens);
+
+      try {
+          forest = parser.parseForest();
+      } catch (const std::exception& e) {
+          std::cerr << "Parser error: " << e.what() << "\n";
+      }
+    }
 
 
     static void read_memory_node(const std::string &file_name, VIEW_CTX_MAP &view_ctx_map) {
@@ -241,10 +403,10 @@ namespace Analysis {
           is_pcs = false;
 
           if (!view_ctx_map.empty()) { // skip the first loop when the map is empty
-            if (view_ctx_map.back().ctx_ids.empty()) { 
+            if (view_ctx_map.back().map_size > 2  && view_ctx_map.back().ctx_ids.empty()) { 
               view_ctx_map.pop_back();  // if the block is empty, remove the block
             } else {
-              for (int it = (view_ctx_map.back().ctx_ids.size() - 1); it >= 0; --it) {  // check if any pystate got no ctx_id, then remove them both
+              for (int it = (view_ctx_map.back().ctx_ids.size() - 1); it > 0; --it) {  // check if any pystate got no ctx_id, then remove them both
                 if (view_ctx_map.back().ctx_ids.at(it).empty() || (view_ctx_map.back().ctx_ids.at(it).size() == 1 
                                                                     && 
                                                                   view_ctx_map.back().ctx_ids.at(it).at(0).ctx_id == 0)) {
@@ -537,6 +699,24 @@ namespace Analysis {
         }
 
       }
+
+      if (!view_ctx_map.empty()) { // skip the first loop when the map is empty
+        if (view_ctx_map.back().map_size > 2 && view_ctx_map.back().ctx_ids.empty()) { 
+          view_ctx_map.pop_back();  // if the block is empty, remove the block
+        } else {
+          for (int it = (view_ctx_map.back().ctx_ids.size() - 1); it > 0; --it) {  // check if any pystate got no ctx_id, then remove them both
+            if (view_ctx_map.back().ctx_ids.at(it).empty() || (view_ctx_map.back().ctx_ids.at(it).size() == 1 
+                                                                && 
+                                                              view_ctx_map.back().ctx_ids.at(it).at(0).ctx_id == 0)) {
+              // std::cout << "branch is taken" << std::endl;
+              view_ctx_map.back().py_states.erase(view_ctx_map.back().py_states.begin() + it);
+              view_ctx_map.back().ctx_ids.erase(view_ctx_map.back().ctx_ids.begin() + it);
+              view_ctx_map.back().map_size--;
+            }
+          }
+        }
+      }
+
       fileread.close();
     }
 
@@ -928,7 +1108,7 @@ namespace Analysis {
 
     void aggregate_stall_weights_by_view_node(VIEW_CTX_MAP& ctx_node_map, STALL_WEIGHTS_MAP& stall_weights_map, const std::string &file_path, uint64_t& gpa_total_stall) {
       // Step 1: read gpa file
-      int res = get_pc_stall_weights(file_path, gpa_total_stall, stall_weights_map);
+      get_pc_stall_weights(file_path, gpa_total_stall, stall_weights_map);
       // Step 2: insert data into "ctx_node_map"
       handle_aggregation(ctx_node_map, stall_weights_map);
       // // step 3: recalculate gpa_total_stall
@@ -1000,6 +1180,175 @@ namespace Analysis {
       }
     }
 
+    static void printForestEdges(std::ofstream &out, const Node &node) {
+      if(node.children.empty()) {
+        return;
+      } else {
+        for (auto child: node.children) {
+          out << node.id << " -> " << child.id << ";" << std::endl;
+          seen_Id.insert(node.id);
+          seen_Id.insert(child.id);
+          seen_Edges[node.id].insert(child.id);
+          printForestEdges(out, child);
+        } 
+      }
+    }
+
+    static void outputDotFile(const std::string &file_path, const VIEW_CTX_MAP& ctx_node_map, STALL_WEIGHTS_MAP& stall_weights_map, uint64_t& gpa_total_stall, forest_t viewForest) {
+      std::string directoryPath;
+      const size_t last_slash_idx = file_path.rfind('/');
+      if (std::string::npos != last_slash_idx) {
+        directoryPath = file_path.substr(0, last_slash_idx);
+      }
+      std::string forest_file = directoryPath.append("/profile.dot");
+
+      // File starts
+      std::stringstream construction;
+      std::ofstream out(forest_file);
+      out << "digraph G {" << std::endl 
+          << "    rankdir=LR;" << std::endl;
+
+      // Print all the nodes
+      for (auto& iter : ctx_node_map) {
+        if (iter.access_type != 0) { // Must be tensor node
+          continue;
+        }
+
+        bool find_root = false;
+        for (auto node: viewForest) {
+          if (node.id == iter.global_id) {
+            find_root = true;
+            break;
+          }
+        }
+        /**
+         * Skip node print out at this point
+         * with any given condition
+        */
+        // condition?
+        if (false) {
+          continue;
+        } // End skipping
+
+        if (find_root) {
+          out << "    " << iter.global_id << "[style=\"\", label=\"" << id_System.get_new_id() << "\" ";
+        } else {
+          out << "    " << iter.global_id << "[style=dashed, label=\"" << id_System.get_new_id() << "\" ";
+        }
+
+        // std::stringstream construction;
+        if(iter.map_size > 0) {
+          int i = 0;
+          for (auto &_states : iter.py_states.at(i)){
+            construction << "arg index: " << _states.index << " num_states: " << _states.num_states << std::endl;
+            construction << " pystates_hash: " << _states.hash;
+            if(gpa_total_stall != 0) {
+              uint64_t pystate_stalls = get_pystate_total_stalls(stall_weights_map, (pystates_hash_t)std::stoul(_states.hash), iter, i);
+              construction << " stalls: " << pystate_stalls << " (" << (double)(100 * pystate_stalls/gpa_total_stall) << "%)";
+            }
+            construction << std::endl;
+            for (auto & _state : _states.python_contexts){
+              construction << "  " << _state.file_name << ":" << _state.function_name << ":" << _state.function_first_lineno << ":" << _state.lineno << std::endl;
+            }
+          }
+          for (auto &_ctxs : iter.ctx_ids.at(i)){
+            construction << "ctx_id: " << _ctxs.ctx_id << std::endl;
+            construction << _ctxs.context; // << std::endl;
+            // out << "pc:" << _ctxs.pcs;
+            construction << "pcs_size: " << _ctxs.pcs.size() << std::endl;
+            construction << "pc:";
+            for (auto & pc : _ctxs.pcs){
+              construction << " " << std::hex << pc << std::dec;
+            }
+            construction << std::endl;
+          }
+          construction << std::endl;
+        }
+        std::string construction_str = construction.str();
+        construction.str("");
+        construction.clear();
+
+        if(gpa_total_stall != 0) { 
+          out << "tooltip=\"Causes total stalls: " << iter.total_stalls << " (" << (double)(100 * iter.total_stalls/gpa_total_stall) << "%)\\n";
+          out << construction_str <<  "\"];" << std::endl;
+        }
+      }
+
+      // Print all the intra-tree edges
+      for (auto& iter : viewForest) {
+        printForestEdges(out, iter);
+      }
+
+      // Print all the inter-tree edges
+      for (auto& target_node : crossTreeRelation) {
+        if (seen_Id.find(target_node.id) == seen_Id.end()) {
+          continue;
+        } 
+        for (auto& scource : target_node.children) {
+          if (seen_Id.find(scource.id) == seen_Id.end()) {
+            continue;
+          } 
+          if (seen_Edges[scource.id].find(target_node.id) == seen_Edges[scource.id].end()) {
+            out << scource.id << " -> " << target_node.id << " [color=green];" << std::endl;
+          }
+        }
+      }
+      
+      std::string access_info;
+      std::stringstream access_info_buffer;
+      // Print node unit access features
+      for (auto& iter : ctx_node_map) {
+        if (iter.access_type != 0) {
+          continue;
+        }
+
+        int map_size = iter.map_size;
+        for (int i = 1; i < map_size; i++) {
+          access_info = "";
+          std::string label_id;
+          // std::stringstream access_info_buffer;
+          uint64_t pystate_stalls;
+          for (auto &_states : iter.py_states.at(i)){
+            access_info_buffer << "arg index: " << _states.index << " num_states: " << _states.num_states << std::endl;
+            access_info_buffer << " pystates_hash: " << _states.hash;
+            label_id = _states.hash;
+            if(gpa_total_stall != 0) {
+              pystate_stalls = get_pystate_total_stalls(stall_weights_map, (pystates_hash_t)std::stoul(_states.hash), iter, i);
+              access_info_buffer << " stalls: " << pystate_stalls << " (" << std::to_string((double)(100 * pystate_stalls/gpa_total_stall)) << "%)";
+            }
+            access_info_buffer << std::endl;
+            for (auto & _state : _states.python_contexts){
+              access_info_buffer << "  " << _state.file_name << ":" << _state.function_name << ":" << std::to_string(_state.function_first_lineno) << ":" << std::to_string(_state.lineno) << std::endl;
+            }
+          }
+          for (auto &_ctxs : iter.ctx_ids.at(i)){
+            access_info_buffer << "ctx_id: " << std::to_string(_ctxs.ctx_id) << std::endl;
+            access_info_buffer << _ctxs.context; // << std::endl;
+            // out << "pc:" << _ctxs.pcs;
+            access_info_buffer << "pcs_size: " << _ctxs.pcs.size() << std::endl;
+            access_info_buffer << "pc:";
+            for (auto & pc : _ctxs.pcs){
+              access_info_buffer << " " << std::hex << pc << std::dec;
+            }
+            access_info_buffer << std::endl;
+          }
+          // access_info_buffer << std::endl;
+          access_info = access_info_buffer.str();
+          access_info_buffer.clear();
+          access_info_buffer.str("");
+
+          out << "    " << "info" << iter.global_id << "_" << i << " ";
+          out << "[shape=note, label=\"" << id_System.get_new_id() /**label_id*/ << "\"," << " width="<< 0.5 + ((int)(100 * pystate_stalls/gpa_total_stall)) * 0.3 
+              << ", height=" << 0.5 + ((int)(100 * pystate_stalls/gpa_total_stall)) * 0.3 
+              << ", shape=note, fillcolor=lightyellow, style=filled," << " tooltip=\"" << access_info << "\"];" << std::endl;
+          out << "    " << iter.global_id << " -> " << "info" << iter.global_id << "_" << i << ";" << std::endl;
+        }
+        //out << "    " << "info" << iter.global_id << std::endl; // add creation context here
+      }
+      // File ends
+      out << "}" << std::endl;
+      out.close();
+    }
 
     void analyzeTorchViewMain(Prof::CallPath::Profile &prof, const std::vector<std::string> &torchViewFiles) {
       Prof::CallPath::CCTIdToCCTNodeMap cctNodeMap;
@@ -1030,11 +1379,19 @@ namespace Analysis {
 
         read_memory_node(file, view_ctx_map);
 
+        // Read forest
+        read_node_relation(file, viewForest, "/forest.txt");
+        read_node_relation(file, crossTreeRelation, "/cross_tree_relations.txt");
+        // std::cout << "Forest size: " << viewForest.size() << std::endl;
+
         matchCCTNode(cctNodeMap, view_ctx_map);
 
         aggregate_stall_weights_by_view_node(view_ctx_map, stall_weights_map, file, gpa_total_stall);
 
         outputContext(file, view_ctx_map, stall_weights_map, gpa_total_stall);
+
+        // Dump a Dot file
+        outputDotFile(file, view_ctx_map, stall_weights_map, gpa_total_stall, viewForest);
 
         finish(view_ctx_map);
 
